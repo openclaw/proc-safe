@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- `readProcessAncestry` stops before PID 1 instead of reading it, so default ancestry walks no longer throw `access-denied` for unprivileged callers on macOS, where `launchd` refuses `proc_pidinfo`.
+- **Breaking:** `readProcessAncestry` now returns a self-first `{ chain, complete, stoppedBy }` snapshot or `null` for a provably gone start, instead of an array; unreadable parents preserve an incomplete chain, `throughPid` stops inclusively, and walks stop before reading parent PID 0 or 1.
 
 ## 0.1.0 - 2026-10-10
 

@@ -12,6 +12,9 @@ describe("public contracts", () => {
   test.each([0, -1, 1.5, NaN, Infinity])("rejects invalid ancestry depth %s", maxDepth => {
     expect(() => readProcessAncestry(process.pid, { maxDepth })).toThrow(expect.objectContaining({ code: "invalid-argument" }));
   });
+  test.each([0, -1, 1.5, NaN, Infinity, 0x1_0000_0000])("rejects invalid throughPid %s", throughPid => {
+    expect(() => readProcessAncestry(process.pid, { throughPid })).toThrow(expect.objectContaining({ code: "invalid-argument" }));
+  });
   test("every subpath imports without loading a binding or spawning a process", () => {
     const output = execFileSync(process.execPath, ["--input-type=module", "-e", `
       process.dlopen = () => { throw new Error('addon was loaded during import'); };
@@ -31,6 +34,8 @@ describe("public contracts", () => {
       try { jobs.WindowsJob.create(); throw new Error('succeeded'); }
       catch (e) { if (e.code !== 'helper-unavailable' && e.code !== 'unsupported-platform') throw e; }
       try { identity.readProcessIdentity(process.pid); throw new Error('succeeded'); }
+      catch (e) { if (e.code !== 'helper-unavailable' && e.code !== 'unsupported-platform') throw e; }
+      try { identity.readProcessAncestry(process.pid); throw new Error('succeeded'); }
       catch (e) { if (e.code !== 'helper-unavailable' && e.code !== 'unsupported-platform') throw e; }
       try { inspect.readProcessCommand(process.pid); throw new Error('succeeded'); }
       catch (e) { if (e.code !== 'helper-unavailable' && e.code !== 'unsupported-platform') throw e; }

@@ -1,5 +1,38 @@
 # Identity and visibility
 
+## Ancestry
+
+`readProcessAncestry(pid, { maxDepth?, throughPid? })` returns a frozen
+`{ chain, complete, stoppedBy }` snapshot, or `null` if the starting process is
+provably gone. `chain` contains the starting identity first. `maxDepth` defaults
+to 32 and counts self; `throughPid` stops after including that PID, including when
+it is the starting PID. The stop at `throughPid` takes precedence over the depth
+limit. A parent born after its child is excluded using boot-relative births where
+available, otherwise epoch births.
+
+| `stoppedBy` | `complete` | Meaning |
+|---|---|---|
+| `root` | `true` | The last observed process has parent PID 0 or 1; neither parent is read. |
+| `missing-parent` | `true` | The parent is provably gone. |
+| `recycled-parent` | `true` | The recorded parent PID now identifies a process born after its child. |
+| `through-pid` | `true` | The requested PID was included. |
+| `cycle` | `false` | Following the parent would revisit an observed PID. |
+| `max-depth` | `false` | The depth limit prevents another observation. |
+| `unreadable-parent` | `false` | The parent identity is unknown, including denied access or visibility policy. |
+
+Invalid arguments and failure to identify the starting PID throw `ProcSafeError`.
+Once the starting identity is known, parent observation failures never throw:
+the partial chain remains useful for callers protecting observed ancestors.
+`complete` describes why this walk ended, not an atomic census or a claim that
+every ancestor is still alive. Applications decide whether partial observations
+are sufficient for their operation.
+
+This is a breaking change from 0.1: use `result?.chain` instead of the former
+array return, handle `null` for a gone start, and check `complete`/`stoppedBy`
+instead of assuming an array reached the root or catching parent read errors.
+
+## Visibility and identity
+
 `null` proves absence only in a permissive process view. FreeBSD caches the three
 `security.bsd.see_*` settings and `security.jail.jailed` at first use; Linux caches
 the `hidepid` options of the `/proc` mount actually used. If that view can hide a

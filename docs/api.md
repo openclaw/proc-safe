@@ -20,7 +20,12 @@ type ProcessIdentity = {
   readonly exited: boolean;
 };
 function readProcessIdentity(pid: number): ProcessIdentity | null;
-function readProcessAncestry(pid: number, options?: { maxDepth?: number }): ProcessIdentity[];
+type ProcessAncestry = {
+  readonly chain: readonly ProcessIdentity[];
+  readonly complete: boolean;
+  readonly stoppedBy: "root" | "missing-parent" | "recycled-parent" | "cycle" | "max-depth" | "through-pid" | "unreadable-parent";
+};
+function readProcessAncestry(pid: number, options?: { maxDepth?: number; throughPid?: number }): ProcessAncestry | null;
 function isSupported(): boolean;
 ```
 
@@ -30,10 +35,15 @@ times otherwise. `exited` describes a zombie or a retained Windows process objec
 it does not erase the object's birth identity. `null` means no kernel object exists.
 
 PIDs must be positive integers representable by the OS. `maxDepth` is a positive safe
-integer, defaults to 32, and counts self. The walk stops before PID 0 or 1 (never reading init/launchd), at a missing process,
-a cycle, or the depth limit. A parent born after its child is a reused PID and is excluded.
+integer, defaults to 32, and counts self. `throughPid`, when supplied, must be a valid
+PID and stops the walk after including that process. The chain is self-first and
+never reads init/launchd as a parent. A parent born after its child is a reused PID
+and is excluded. `complete` is true only for `root`, `missing-parent`, `recycled-parent`,
+or `through-pid`; `cycle`, `max-depth`, and `unreadable-parent` are incomplete.
+Only failure to identify the starting process throws; a proven missing start returns
+`null`. Parent read failures preserve the observed chain with `unreadable-parent`.
 Observations are fresh, including foreign processes. An identity is a snapshot, not a
-retained process handle. Permission failures throw, even partway through ancestry.
+retained process handle.
 See [identity and visibility](identity.md) for policy-aware absence results.
 
 `@openclaw/proc-safe/darwin` exports:

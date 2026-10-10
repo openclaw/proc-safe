@@ -3,12 +3,13 @@ import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
 import { ProcSafeError } from "../dist/errors.js";
-import { readProcessIdentity } from "../dist/identity.js";
+import { readProcessAncestry, readProcessIdentity } from "../dist/identity.js";
 import { readProcessCommand, listProcesses } from "../dist/inspect.js";
 
 function assertDenied(pid) {
   assert.ok(Number.isInteger(pid) && pid > 0);
   assert.throws(() => readProcessIdentity(pid), error => error instanceof ProcSafeError && error.code === "access-denied");
+  assert.throws(() => readProcessAncestry(pid), error => error instanceof ProcSafeError && error.code === "access-denied");
   if (process.platform === "win32") {
     assert.throws(() => readProcessCommand(pid), error => error instanceof ProcSafeError && error.code === "access-denied");
     const rows = listProcesses({ timeoutMs: 5000, includeCommand: true });

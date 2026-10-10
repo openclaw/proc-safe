@@ -117,8 +117,24 @@ type ProcessIdentity = {
 ```
 
 Compare `startTimeSinceBootMicros` when both sides have it; it can't move when someone sets the
-clock. `readProcessAncestry(pid)` walks parents and stops at a recycled PID (a "parent" born
-after its child). Details: [identity and visibility](docs/identity.md).
+clock. Ancestry returns a self-first chain with explicit completeness:
+
+```ts
+import { readProcessAncestry } from "@openclaw/proc-safe/identity";
+
+const ancestry = readProcessAncestry(process.pid, { maxDepth: 32 });
+if (ancestry) {
+  const observedPids = ancestry.chain.map(identity => identity.pid);
+  console.log(observedPids, ancestry.complete, ancestry.stoppedBy);
+}
+```
+
+`null` means the starting process is provably gone; an unknown starting identity throws.
+An unreadable parent preserves the partial chain with `complete: false` and
+`stoppedBy: "unreadable-parent"`. A root, missing or recycled parent ends a complete
+walk; a cycle or depth limit is incomplete. `throughPid` stops after including the
+requested ancestor and is complete. PID 0 and 1 are never read as parents.
+Details and migration from the former array return: [identity and visibility](docs/identity.md).
 
 ## Command inspection and Windows census
 
