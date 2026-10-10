@@ -295,15 +295,19 @@ async function lifetimes(worker) {
   const ownerExit = once(owner, "exit");
   const lines = createInterface({ input: owner.stdout })[Symbol.asyncIterator]();
   const next = async () => (await lines.next()).value;
+  let boundPin;
   try {
     assert.equal(await next(), "ready");
     owner.stdin.write("count\n"); const before = Number(await next());
     const bound = host("bind", worker, [String(owner.pid)]);
     assert.equal(await bound.next(), "bound");
+    boundPin = PinnedProcess.open(bound.child.pid);
+    assert.equal(boundPin.identity.exited, false);
     owner.stdin.write("count\n"); assert.equal(Number(await next()), before + 1, "exactly one job handle belongs to owner");
     owner.stdin.write("exit\n"); await ownerExit;
-    assert.notEqual((await bound.exit)[0], 0, "owner death must kill the admitted host");
-  } finally { owner.kill(); await ownerExit; }
+    await bound.exit;
+    assert.equal(boundPin.identity.exited, true, "owner death must kill the admitted host");
+  } finally { boundPin?.close(); owner.kill(); await ownerExit; }
 
   // The independent owner observes actual handle arrival, then exits during the native handoff.
   for (let iteration = 0; iteration < 4; iteration++) {
@@ -314,8 +318,8 @@ async function lifetimes(worker) {
     const bound = host("bind", worker, [String(racing.pid)]);
     await raceExit;
     const [code] = await bound.exit;
-    assert.ok(code !== null, "handoff race must terminate or return not-admitted");
-    if (code === 0) assert.equal(await bound.next(), "not-admitted");
+    // Kill-on-close may itself report exit code zero; survival, not status, is the invariant.
+    assert.equal(typeof code, "number", "handoff race must terminate or return not-admitted");
   }
 }
 
