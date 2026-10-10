@@ -9,6 +9,7 @@ test("resources cannot be fabricated through JavaScript constructors", () => {
 });
 
 test("Windows job platform gate", () => {
+  expect(typeof isSupported()).toBe("boolean");
   if (process.platform !== "win32") {
     expect(isSupported()).toBe(false);
     for (const run of [() => WindowsJob.create(), () => WindowsJob.open("missing"), () => PinnedProcess.open(process.pid), isCurrentProcessInJob]) {

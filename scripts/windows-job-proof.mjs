@@ -121,14 +121,14 @@ async function operations() {
   membership.close();
   assert.throws(() => job.spawn({ executable: "C:\\missing.exe", commandLine: "missing" }), e => e.code === "operation-failed");
   assert.throws(() => job.spawn({ executable: process.execPath, commandLine: "x", env: { PATH: "a", Path: "b" } }), e => e.code === "invalid-argument");
-  const child = launch(job, `process.stdout.write('x'.repeat(180000));process.stderr.write('y'.repeat(160000));`, {});
+  const child = launch(job, `process.stdout.write('x'.repeat(180000));process.stderr.write('y'.repeat(160000));`);
   assert.ok(Object.isFrozen(child));
   const pid = child.pid;
   const pin = PinnedProcess.open(pid);
   assert.equal(pin.identity.pid, pid);
   assert.ok(job.processIds().includes(pid));
   const result = await drain(child);
-  assert.equal(result.code, 0);
+  assert.equal(result.code, 0, result.err.toString());
   assert.equal(result.out.toString(), "x".repeat(180000));
   assert.equal(result.err.toString(), "y".repeat(160000));
   assert.equal(pin.identity.exited, true);
@@ -138,8 +138,14 @@ async function operations() {
   assert.throws(() => child.readStdout(1), e => e.code === "invalid-argument");
   for (const env of [undefined, {}]) {
     process.env.PROC_SAFE_JOB_INHERIT = "yes";
-    const c = launch(job, "process.stdout.write(process.env.PROC_SAFE_JOB_INHERIT ?? 'empty')", env);
-    assert.equal((await drain(c)).out.toString(), env ? "empty" : "yes");
+    // The fixture observes the actual environment without Node's SystemRoot requirement.
+    const c = job.spawn({ executable: fixture, commandLine: [fixture, "environment"].map(quote).join(" "), env });
+    const observed = await drain(c);
+    assert.equal(observed.code, 0, observed.err.toString());
+    const [value, count] = observed.out.toString().trim().split(" ");
+    assert.equal(value, env ? "empty" : "yes");
+    if (env) assert.equal(Number(count), 0);
+    else assert.ok(Number(count) > 0);
     c.close();
   }
   delete process.env.PROC_SAFE_JOB_INHERIT;

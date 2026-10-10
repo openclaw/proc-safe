@@ -16,6 +16,13 @@ fn main() {
     };
     let args: Vec<String> = std::env::args().collect();
     match args[1].as_str() {
+        "environment" => {
+            println!(
+                "{} {}",
+                std::env::var("PROC_SAFE_JOB_INHERIT").unwrap_or_else(|_| "empty".into()),
+                std::env::vars_os().count()
+            );
+        }
         "membership" => {
             let mut inside = 0;
             assert_ne!(
