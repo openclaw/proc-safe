@@ -32,7 +32,7 @@ class WindowsJob implements Disposable {
   static create(options?: { name?: string; killOnJobClose?: boolean }): WindowsJob;
   static open(name: string): WindowsJob | null;
   assignCurrentProcess(): void;
-  assignProcess(process: PinnedProcess): void;
+  assignProcess(target: PinnedProcess): void;
   spawn(options: WindowsJobSpawnOptions): WindowsJobChild;
   processIds(): number[];
   accounting(): { readonly activeProcesses: number; readonly totalProcesses: number; readonly terminatedProcesses: number };

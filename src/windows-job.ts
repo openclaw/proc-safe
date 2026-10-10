@@ -29,7 +29,7 @@ function binding() {
   }
   return native as Required<Pick<typeof native, "createWindowsJob" | "openWindowsJob" | "openPinnedProcess" | "isCurrentProcessInJob">>;
 }
-function owner<T extends object, N>(map: WeakMap<T, N>, value: T): N {
+function nativeOwner<T extends object, N>(map: WeakMap<T, N>, value: T): N {
   const native = map.get(value);
   if (!native) throw new ProcSafeError("invalid-argument", "resource is closed or is not an owned resource");
   return native;
@@ -66,10 +66,10 @@ export class WindowsJob implements Disposable {
     const resource = call(() => native.openWindowsJob(name));
     return resource === null ? null : new WindowsJob(resource, key);
   }
-  assignCurrentProcess(): void { call(() => owner(jobs, this).assignCurrent()); }
-  assignProcess(process: PinnedProcess): void { call(() => owner(jobs, this).assign(owner(pinned, process))); }
+  assignCurrentProcess(): void { call(() => nativeOwner(jobs, this).assignCurrent()); }
+  assignProcess(target: PinnedProcess): void { call(() => nativeOwner(jobs, this).assign(nativeOwner(pinned, target))); }
   spawn(options: WindowsJobSpawnOptions): WindowsJobChild {
-    const job = owner(jobs, this);
+    const job = nativeOwner(jobs, this);
     text(options.executable, "executable");
     text(options.commandLine, "commandLine");
     if (options.cwd !== undefined) text(options.cwd, "cwd");
@@ -89,11 +89,11 @@ export class WindowsJob implements Disposable {
     }
     return createChild(call(() => job.spawn(options.executable, options.commandLine, options.cwd, environment)));
   }
-  processIds(): number[] { return call(() => owner(jobs, this).processIds()); }
+  processIds(): number[] { return call(() => nativeOwner(jobs, this).processIds()); }
   accounting(): { readonly activeProcesses: number; readonly totalProcesses: number; readonly terminatedProcesses: number } {
-    return Object.freeze(call(() => owner(jobs, this).accounting()));
+    return Object.freeze(call(() => nativeOwner(jobs, this).accounting()));
   }
-  terminate(exitCode: number): void { uint(exitCode, "exitCode"); call(() => owner(jobs, this).terminate(exitCode)); }
+  terminate(exitCode: number): void { uint(exitCode, "exitCode"); call(() => nativeOwner(jobs, this).terminate(exitCode)); }
   close(): void {
     const resource = jobs.get(this);
     if (resource) { jobs.delete(this); call(() => resource.close()); }
@@ -107,10 +107,10 @@ export class WindowsJobChild implements Disposable {
     children.set(this, native); Object.freeze(this);
   }
   static { createChild = native => new WindowsJobChild(native, key); }
-  get pid(): number { return call(() => owner(children, this).pid); }
-  readStdout(maxBytes: number): Buffer | null { uint(maxBytes, "maxBytes", 1); return call(() => owner(children, this).readStdout(maxBytes)); }
-  readStderr(maxBytes: number): Buffer | null { uint(maxBytes, "maxBytes", 1); return call(() => owner(children, this).readStderr(maxBytes)); }
-  exitCode(): number | null { return call(() => owner(children, this).exitCode()); }
+  get pid(): number { return call(() => nativeOwner(children, this).pid); }
+  readStdout(maxBytes: number): Buffer | null { uint(maxBytes, "maxBytes", 1); return call(() => nativeOwner(children, this).readStdout(maxBytes)); }
+  readStderr(maxBytes: number): Buffer | null { uint(maxBytes, "maxBytes", 1); return call(() => nativeOwner(children, this).readStderr(maxBytes)); }
+  exitCode(): number | null { return call(() => nativeOwner(children, this).exitCode()); }
   close(): void {
     const resource = children.get(this);
     if (resource) { children.delete(this); call(() => resource.close()); }
@@ -133,8 +133,8 @@ export class PinnedProcess implements Disposable {
     const resource = call(() => native.openPinnedProcess(pid, expect?.imagePath, expect?.startTimeMicros));
     return resource === null ? null : new PinnedProcess(resource, key);
   }
-  get identity(): ProcessIdentity { return Object.freeze(call(() => owner(pinned, this).identity)); }
-  get imagePath(): string { return call(() => owner(pinned, this).imagePath); }
+  get identity(): ProcessIdentity { return Object.freeze(call(() => nativeOwner(pinned, this).identity)); }
+  get imagePath(): string { return call(() => nativeOwner(pinned, this).imagePath); }
   close(): void {
     const resource = pinned.get(this);
     if (resource) { pinned.delete(this); call(() => resource.close()); }
@@ -145,11 +145,11 @@ export class PinnedProcess implements Disposable {
 export function isCurrentProcessInJob(): boolean { return call(() => binding().isCurrentProcessInJob()); }
 /** Assign the current process and consume the owner, retaining its handle until OS process exit. */
 export function retainCurrentProcessJobUntilExit(job: WindowsJob): void {
-  call(() => owner(jobs, job).retain());
+  call(() => nativeOwner(jobs, job).retain());
   jobs.delete(job);
 }
 /** The verified owner receives the only handle to a fresh job containing this process. */
-export function bindCurrentProcessLifetimeTo(process: PinnedProcess): void {
-  call(() => owner(pinned, process).bindLifetime());
+export function bindCurrentProcessLifetimeTo(owner: PinnedProcess): void {
+  call(() => nativeOwner(pinned, owner).bindLifetime());
 }
 export function isSupported(): boolean { try { binding(); return true; } catch { return false; } }
