@@ -10,10 +10,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation, WAIT_OBJECT_0,
         },
         Security::{
-            ACL, ACL_REVISION, CreateRestrictedToken, DACL_SECURITY_INFORMATION,
-            DISABLE_MAX_PRIVILEGE, InitializeAcl, InitializeSecurityDescriptor,
-            SECURITY_DESCRIPTOR, SetKernelObjectSecurity, SetSecurityDescriptorDacl,
-            TOKEN_ASSIGN_PRIMARY, TOKEN_DUPLICATE, TOKEN_QUERY, TOKEN_WRITE_DAC,
+            ACL, ACL_REVISION, CreateRestrictedToken, CreateWellKnownSid,
+            DACL_SECURITY_INFORMATION, DISABLE_MAX_PRIVILEGE, InitializeAcl,
+            InitializeSecurityDescriptor, SECURITY_DESCRIPTOR, SID_AND_ATTRIBUTES,
+            SetKernelObjectSecurity, SetSecurityDescriptorDacl, TOKEN_ASSIGN_PRIMARY,
+            TOKEN_DUPLICATE, TOKEN_QUERY, TOKEN_WRITE_DAC, WinBuiltinAdministratorsSid,
         },
         System::{
             Console::{GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE},
@@ -72,7 +73,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let arguments: Vec<_> = std::env::args().skip(1).collect();
     let deny_caller_token = arguments.len() == 4 && arguments[3] == "--deny-token";
-    if arguments.len() != 3 && !deny_caller_token {
+    let pin_access = arguments.len() == 4 && arguments[3] == "--pin-access";
+    if arguments.len() != 3 && !deny_caller_token && !pin_access {
         return Err("expected runtime, probe script, and target PID".into());
     }
     let mut token: HANDLE = std::ptr::null_mut();
@@ -87,13 +89,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err(io::Error::last_os_error().into());
     }
     let token = unsafe { OwnedHandle::from_raw_handle(token) };
+    let mut admin_sid = [0u32; 17];
+    let mut admin_sid_len = size_of::<[u32; 17]>() as u32;
+    if pin_access
+        && unsafe {
+            CreateWellKnownSid(
+                WinBuiltinAdministratorsSid,
+                std::ptr::null_mut(),
+                admin_sid.as_mut_ptr().cast(),
+                &mut admin_sid_len,
+            )
+        } == 0
+    {
+        return Err(io::Error::last_os_error().into());
+    }
+    let disabled_admin = SID_AND_ATTRIBUTES {
+        Sid: admin_sid.as_mut_ptr().cast(),
+        Attributes: 0,
+    };
     let mut restricted: HANDLE = std::ptr::null_mut();
     if unsafe {
         CreateRestrictedToken(
             token.as_raw_handle(),
             DISABLE_MAX_PRIVILEGE,
-            0,
-            std::ptr::null(),
+            u32::from(pin_access),
+            if pin_access {
+                &disabled_admin
+            } else {
+                std::ptr::null()
+            },
             0,
             std::ptr::null(),
             0,
