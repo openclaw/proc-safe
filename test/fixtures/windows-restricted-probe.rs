@@ -6,17 +6,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle},
     };
     use windows_sys::Win32::{
-        Foundation::{HANDLE, WAIT_OBJECT_0},
+        Foundation::{
+            HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation, WAIT_OBJECT_0,
+        },
         Security::{
             ACL, ACL_REVISION, CreateRestrictedToken, DACL_SECURITY_INFORMATION,
             DISABLE_MAX_PRIVILEGE, InitializeAcl, InitializeSecurityDescriptor,
             SECURITY_DESCRIPTOR, SetKernelObjectSecurity, SetSecurityDescriptorDacl,
             TOKEN_ASSIGN_PRIMARY, TOKEN_DUPLICATE, TOKEN_QUERY, TOKEN_WRITE_DAC,
         },
-        System::Threading::{
-            CREATE_NO_WINDOW, CREATE_SUSPENDED, CreateProcessAsUserW, GetCurrentProcess,
-            GetExitCodeProcess, OpenProcessToken, PROCESS_INFORMATION, ResumeThread, STARTUPINFOW,
-            TerminateProcess, WaitForSingleObject,
+        System::{
+            Console::{GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE},
+            Threading::{
+                CREATE_NO_WINDOW, CREATE_SUSPENDED, CreateProcessAsUserW, GetCurrentProcess,
+                GetExitCodeProcess, OpenProcessToken, PROCESS_INFORMATION, ResumeThread,
+                STARTF_USESTDHANDLES, STARTUPINFOW, TerminateProcess, WaitForSingleObject,
+            },
         },
     };
 
@@ -111,6 +116,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
     let mut startup: STARTUPINFOW = unsafe { zeroed() };
     startup.cb = size_of::<STARTUPINFOW>() as u32;
+    startup.dwFlags = STARTF_USESTDHANDLES;
+    startup.hStdInput = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
+    startup.hStdOutput = unsafe { GetStdHandle(STD_OUTPUT_HANDLE) };
+    startup.hStdError = unsafe { GetStdHandle(STD_ERROR_HANDLE) };
+    for stdio in [startup.hStdInput, startup.hStdOutput, startup.hStdError] {
+        if !stdio.is_null()
+            && stdio != INVALID_HANDLE_VALUE
+            && unsafe { SetHandleInformation(stdio, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) } == 0
+        {
+            return Err(io::Error::last_os_error().into());
+        }
+    }
     let mut process: PROCESS_INFORMATION = unsafe { zeroed() };
     if unsafe {
         CreateProcessAsUserW(
@@ -119,7 +136,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             command.as_mut_ptr(),
             std::ptr::null(),
             std::ptr::null(),
-            0,
+            1,
             CREATE_NO_WINDOW
                 | if deny_caller_token {
                     CREATE_SUSPENDED
