@@ -1,6 +1,10 @@
 # Native architecture
 
 Each capability has an independent TypeScript entry point and a Rust module under native/src.
+The [systemd capability](systemd.md) loads `libsystemd.so.0` lazily through `dlopen`,
+with no link-time dependency. Each connection's dedicated native thread owns its
+bus, messages, credentials, and cleanup. N-API asynchronous tasks deliver owned
+results; no sd-bus work or caller callbacks execute on the JavaScript thread.
 The common loader selects exactly one matching optional package. It captures the import-time
 async context so native registration does not retain the first operation's request scope.
 It caches load attempts, never starts child processes, and never downloads or compiles code.

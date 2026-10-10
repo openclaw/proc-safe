@@ -42,6 +42,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm native:build
+      - name: Prepare real systemd user-manager proof
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsystemd-dev
+          sh scripts/setup-systemd-proof.sh
       - name: Native Node contracts and main/Worker proof
         env:
           PROC_SAFE_NATIVE: require
@@ -53,6 +59,17 @@ jobs:
         env:
           PROC_SAFE_NATIVE: require
         run: pnpm test:bun
+      - name: Real systemd cross-user machine bridge on Node and Bun
+        if: runner.os == 'Linux'
+        run: |
+          sudo "$(command -v node)" scripts/systemd-machine-proof.mjs "$(id -un)" "$(id -u)"
+          sudo "$(command -v bun)" scripts/systemd-machine-proof.mjs "$(id -un)" "$(id -u)"
+      - name: Stop systemd proof unit
+        if: always() && runner.os == 'Linux'
+        run: |
+          if [ -n "${PROC_SAFE_SYSTEMD_UNIT:-}" ]; then
+            systemctl --user stop "$PROC_SAFE_SYSTEMD_UNIT"
+          fi
       - name: Real Windows permission denial
         if: runner.os == 'Windows'
         run: node scripts/check-windows-denial.mjs
@@ -106,6 +123,7 @@ jobs:
             pnpm install --frozen-lockfile
             pnpm build
             pnpm native:build
+            export PROC_SAFE_SYSTEMD_NO_LIBRARY=1
             PROC_SAFE_NATIVE=require pnpm test
             node scripts/check-residency-denial.mjs
             pnpm package:smoke

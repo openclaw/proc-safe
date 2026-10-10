@@ -10,7 +10,9 @@ export function fromNativeError(error: unknown): ProcSafeError {
   if (error instanceof ProcSafeError) return error;
   const message = error instanceof Error ? error.message : String(error);
   const code = message.slice(0, message.indexOf(":")) as ProcSafeErrorCode;
+  const dbusErrorName = /^[^:]+: dbus-error\[([A-Za-z0-9_.]+)\]$/.exec(message)?.[1];
   return new ProcSafeError(nativeCodes.has(code) ? code : "operation-failed", message, { cause: error,
+    ...(dbusErrorName ? { details: { dbusErrorName } } : {}),
     ...(code === "access-denied" && message === "access-denied: visibility-policy"
       ? { details: { reason: "visibility-policy" } } : {}),
     ...(code === "operation-failed" && message === "operation-failed: not-a-child"

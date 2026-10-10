@@ -36,3 +36,8 @@ Read the [API](docs/api.md), [native architecture](docs/native.md),
 [child reaping](docs/reaper.md), [page-cache diagnostics](docs/diagnostics.md),
 [test fixtures](docs/test-support.md),
 [contribution guide](CONTRIBUTING.md), and [security policy](SECURITY.md). MIT licensed.
+
+Linux service-manager inspection is available through [`@openclaw/proc-safe/systemd`](docs/systemd.md).
+Connections own their native bus, serialize asynchronous calls, and apply a relative
+timeout to each operation, including queue time. Direct manager connections expose
+authenticated peer credentials; broker and machine routes make no peer identity claim.

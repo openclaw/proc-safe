@@ -1,5 +1,8 @@
 # API
 
+See [systemd connections](systemd.md) for the Linux `./systemd` subpath, typed
+messages, connection ownership, and deadline and authentication contracts.
+
 `@openclaw/proc-safe/identity` exports:
 
 ```ts
