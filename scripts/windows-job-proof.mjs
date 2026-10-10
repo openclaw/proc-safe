@@ -225,25 +225,26 @@ async function environments() {
 }
 
 async function exitedOwners() {
-  for (const openAfterExit of [false, true]) {
+  for (const alreadyExited of [false, true]) {
     const child = spawn(fixture, ["owner"], { stdio: ["pipe", "pipe", "inherit"] });
     const exit = once(child, "exit");
     const input = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
     assert.equal((await input.next()).value, "ready");
     const retained = PinnedProcess.open(child.pid);
-    let owner = retained;
     try {
       assert.equal(retained.identity.exited, false);
       child.stdin.write("exit\n"); await exit;
-      if (openAfterExit) owner = PinnedProcess.open(child.pid);
-      assert.equal(owner.identity.exited, true);
+      // Exercise both exit immediately between pin/bind and an already-exited retained pin.
+      // Reopening an exited PID would query an image Windows may have already released.
+      if (alreadyExited) await new Promise(resolve => setImmediate(resolve));
+      assert.equal(retained.identity.exited, true);
       const count = () => Number(execFileSync(fixture, ["handle-count", String(child.pid)], { encoding: "utf8" }).trim());
       const beforeCount = count();
       const beforeJob = isCurrentProcessInJob();
-      assert.throws(() => bindCurrentProcessLifetimeTo(owner), e => e.code === "operation-failed" && e.message.includes("exited"));
+      assert.throws(() => bindCurrentProcessLifetimeTo(retained), e => e.code === "operation-failed" && e.message.includes("exited"));
       assert.equal(isCurrentProcessInJob(), beforeJob);
       assert.equal(count(), beforeCount);
-    } finally { owner?.close(); retained.close(); child.kill(); await exit; }
+    } finally { retained.close(); child.kill(); await exit; }
   }
 }
 
