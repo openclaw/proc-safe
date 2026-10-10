@@ -51,6 +51,10 @@
     "./test-support": {
       "types": "./dist/test-support.d.ts",
       "default": "./dist/test-support.js"
+    },
+    "./reaper": {
+      "types": "./dist/reaper.d.ts",
+      "default": "./dist/reaper.js"
     }
   },
   "scripts": {

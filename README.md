@@ -1,7 +1,7 @@
 # @openclaw/proc-safe
 
-Typed process identity, Darwin resource-coalition observations, and Linux page-cache
-diagnostics for Node.js 22+.
+Typed process identity, Darwin resource-coalition observations, Linux child reaping,
+and page-cache diagnostics for Node.js 22+.
 Native bindings load on the first operation, never at import time. No runtime downloads,
 postinstall builds, shell fallback, or compression dependencies.
 
@@ -33,5 +33,6 @@ Ten platform packages are defined for Darwin arm64/x64, Linux GNU/musl arm64/x64
 Windows arm64/x64, and FreeBSD arm64/x64 (14.4 or newer).
 
 Read the [API](docs/api.md), [native architecture](docs/native.md),
-[page-cache diagnostics](docs/diagnostics.md), [test fixtures](docs/test-support.md),
+[child reaping](docs/reaper.md), [page-cache diagnostics](docs/diagnostics.md),
+[test fixtures](docs/test-support.md),
 [contribution guide](CONTRIBUTING.md), and [security policy](SECURITY.md). MIT licensed.

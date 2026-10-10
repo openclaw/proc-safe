@@ -16,7 +16,7 @@ export function installKillGroupSeccompFilter(): void {
 }
 
 /** Windows test fixture: no inherited handles, console window, or libuv child ownership. */
-export function spawnDetachedRaw(options: {
+export function spawnRawWithoutConsole(options: {
   executable: string;
   args?: readonly string[];
   cwd?: string;
@@ -28,7 +28,7 @@ export function spawnDetachedRaw(options: {
     throw new ProcSafeError("invalid-argument", "fixture executable, arguments, and cwd must be strings without NULs");
   }
   requirePlatform("win32");
-  const spawn = getNativeBinding()?.spawnDetachedRaw;
+  const spawn = getNativeBinding()?.spawnRawWithoutConsole;
   if (!spawn) throw new ProcSafeError("helper-unavailable", "native detached-spawn fixture is unavailable");
   try { return Object.freeze({ pid: spawn(options.executable, [...options.args ?? []], options.cwd) }); }
   catch (error) { throw fromNativeError(error); }
@@ -46,6 +46,6 @@ export function isSupported(): boolean {
   try {
     const binding = (process.platform === "linux" || process.platform === "win32") ? getNativeBinding() : undefined;
     return process.platform === "linux" ? typeof binding?.installKillGroupSeccompFilter === "function"
-      : process.platform === "win32" && typeof binding?.spawnDetachedRaw === "function" && typeof binding.hasConsoleWindow === "function";
+      : process.platform === "win32" && typeof binding?.spawnRawWithoutConsole === "function" && typeof binding.hasConsoleWindow === "function";
   } catch { return false; }
 }

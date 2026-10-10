@@ -46,6 +46,11 @@ the main thread and real Workers. Linux seccomp proof runs in disposable child p
 Page-cache sampling uses one bounded `PROT_NONE` mapping at a time and always unmaps
 through Rust. Windows raw-spawn fixtures are independent of production launch owners,
 disable handle inheritance, and close their process/thread handles in Rust.
+Linux reaping uses non-consuming `waitid` observations and PID-specific `waitpid`,
+both with `__WALL`; it never performs a reap-any-child operation. The Node-only
+`scripts/reaper-proof.mjs` runs dedicated owners on the main thread and a Worker,
+including a non-SIGCHLD clone child retained across exec, adopted grandchildren,
+and libuv-owned Node children whose exit events must retain their real status.
 Both the main thread and a real Worker query native identities. Packed npm and pnpm root-only
 installs test native loading, platform filtering, and Worker behavior outside the workspace.
 Run `pnpm benchmark:imports` and `bun scripts/benchmark-imports.mjs` for fresh-process import

@@ -16,7 +16,7 @@ describe("public contracts", () => {
     const output = execFileSync(process.execPath, ["--input-type=module", "-e", `
       process.dlopen = () => { throw new Error('addon was loaded during import'); };
       process.env.PROC_SAFE_NATIVE = 'require';
-      for (const name of ['index', 'errors', 'identity', 'darwin', 'diagnostics', 'test-support']) await import('./dist/' + name + '.js');
+      for (const name of ['index', 'errors', 'identity', 'darwin', 'reaper', 'diagnostics', 'test-support']) await import('./dist/' + name + '.js');
       console.log('lazy');
     `], { encoding: "utf8" });
     expect(output.trim()).toBe("lazy");

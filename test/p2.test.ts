@@ -1,7 +1,7 @@
 import { test, expect } from "vitest";
 import { execFileSync } from "node:child_process";
 import { samplePageCacheResidency } from "../src/diagnostics.js";
-import { spawnDetachedRaw } from "../src/test-support.js";
+import { spawnRawWithoutConsole } from "../src/test-support.js";
 
 test.each([-1, 1.5, NaN, Infinity, 0x80000000])("diagnostics rejects invalid fd %s", fd => {
   expect(() => samplePageCacheResidency(fd, { maxPages: 1 })).toThrow(expect.objectContaining({ code: "invalid-argument" }));
@@ -10,7 +10,7 @@ test.each([0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])("diagnostics
   expect(() => samplePageCacheResidency(0, { maxPages })).toThrow(expect.objectContaining({ code: "invalid-argument" }));
 });
 test("raw spawn rejects NUL-containing arguments", () => {
-  expect(() => spawnDetachedRaw({ executable: "node", args: ["a\0b"] })).toThrow(expect.objectContaining({ code: "invalid-argument" }));
+  expect(() => spawnRawWithoutConsole({ executable: "node", args: ["a\0b"] })).toThrow(expect.objectContaining({ code: "invalid-argument" }));
 });
 test("disabled P2 capabilities never load native code", () => {
   const result = execFileSync(process.execPath, ["--input-type=module", "-e", `

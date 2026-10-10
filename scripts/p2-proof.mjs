@@ -65,7 +65,7 @@ async function detached() {
       cwd, console: hasConsoleWindow() }));`);
   let pid;
   try {
-    const child = fixtures.spawnDetachedRaw({ executable: process.execPath, args: [script, output, ...args], cwd: directory });
+    const child = fixtures.spawnRawWithoutConsole({ executable: process.execPath, args: [script, output, ...args], cwd: directory });
     pid = child.pid;
     assert.ok(Object.isFrozen(child));
     assert.ok(Number.isInteger(pid) && pid > 0);
@@ -146,10 +146,10 @@ if (!isMainThread) {
     assert.equal(fixtures.isSupported(), true);
     await detached();
     assert.equal(await inWorker("detached"), "detached-console-free");
-    assert.throws(() => fixtures.spawnDetachedRaw({ executable: "Z:\\proc-safe-missing\\child.exe" }), { code: "operation-failed" });
+    assert.throws(() => fixtures.spawnRawWithoutConsole({ executable: "Z:\\proc-safe-missing\\child.exe" }), { code: "operation-failed" });
     passed += 3;
   } else {
-    assert.throws(() => fixtures.spawnDetachedRaw({ executable: "missing" }), { code: "unsupported-platform" });
+    assert.throws(() => fixtures.spawnRawWithoutConsole({ executable: "missing" }), { code: "unsupported-platform" });
     assert.throws(() => fixtures.hasConsoleWindow(), { code: "unsupported-platform" });
     if (process.platform !== "linux") assert.equal(fixtures.isSupported(), false);
     passed++;

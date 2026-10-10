@@ -40,6 +40,25 @@ A zero resource-coalition ID or a proven missing process returns `null`. Missing
 XPC symbols only omit the optional name; failure of the kernel observation throws.
 No service-membership policy is applied. Private XPC availability is not guaranteed.
 
+`@openclaw/proc-safe/reaper` exports [Linux child ownership and reaping](reaper.md):
+
+```ts
+type ChildWaitState =
+  | { readonly kind: "none" }
+  | { readonly kind: "running" }
+  | { readonly kind: "exited"; readonly pid: number };
+type ChildExit = {
+  readonly pid: number;
+  readonly exitCode: number | null;
+  readonly signal: NodeJS.Signals | null;
+};
+function becomeChildSubreaper(): void;
+function isChildSubreaper(): boolean;
+function inspectChildWaitState(pid?: number): ChildWaitState;
+function reapChild(pid: number): ChildExit | null;
+function isSupported(): boolean;
+```
+
 `@openclaw/proc-safe/diagnostics` exports [Linux page-cache observations](diagnostics.md):
 
 ```ts

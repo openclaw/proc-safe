@@ -13,5 +13,7 @@ export function fromNativeError(error: unknown): ProcSafeError {
   return new ProcSafeError(nativeCodes.has(code) ? code : "operation-failed", message, { cause: error,
     ...(code === "access-denied" && message === "access-denied: visibility-policy"
       ? { details: { reason: "visibility-policy" } } : {}),
+    ...(code === "operation-failed" && message === "operation-failed: not-a-child"
+      ? { details: { reason: "not-a-child" } } : {}),
   });
 }

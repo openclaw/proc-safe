@@ -46,7 +46,7 @@ fn error(operation: &str, code: u32) -> napi::Error {
 }
 
 #[napi]
-pub fn spawn_detached_raw(
+pub fn spawn_raw_without_console(
     executable: String,
     args: Vec<String>,
     cwd: Option<String>,

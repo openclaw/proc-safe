@@ -7,7 +7,7 @@ individual operations still enforce their platform and throw `ProcSafeError`.
 
 ```ts
 function installKillGroupSeccompFilter(): void;
-function spawnDetachedRaw(options: {
+function spawnRawWithoutConsole(options: {
   executable: string;
   args?: readonly string[];
   cwd?: string;
@@ -24,7 +24,7 @@ terminates the process. Existing sibling threads are unaffected; newly created
 threads/children inherit the filter. This is a focused group-kill denial fixture,
 not a complete sandbox. Installation can fail after `no_new_privs` has been set.
 
-On Windows, `spawnDetachedRaw` directly invokes `CreateProcessW` with
+On Windows, `spawnRawWithoutConsole` directly invokes `CreateProcessW` with
 `CREATE_NO_WINDOW`, no inherited handles, the inherited environment, and optional
 working directory. Arguments follow Windows CRT quoting, including empty arguments,
 quotes, and trailing backslashes. The child is outside libuv's child registry;
