@@ -23,6 +23,18 @@ use windows_sys::Win32::{
     },
 };
 
+#[cfg(feature = "fault-injection")]
+thread_local! {
+    static FAIL_ASSIGNMENT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Only the separate fault-proof addon exports this thread-local, one-shot fault.
+#[cfg(feature = "fault-injection")]
+#[napi]
+pub fn fail_next_windows_job_assignment() {
+    FAIL_ASSIGNMENT.set(true);
+}
+
 fn win_error(operation: &str) -> napi::Error {
     let code = unsafe { GetLastError() };
     failure(
@@ -171,6 +183,13 @@ impl NativePinnedProcess {
         let assigned = (|| {
             // The duplicate is non-inheritable. Only the pinned owner can keep this job alive.
             live(owner)?;
+            #[cfg(feature = "fault-injection")]
+            if FAIL_ASSIGNMENT.replace(false) {
+                return Err(failure(
+                    "operation-failed",
+                    "injected job assignment failure",
+                ));
+            }
             if unsafe { AssignProcessToJobObject(local, GetCurrentProcess()) } == 0 {
                 return Err(win_error("AssignProcessToJobObject(lifetime)"));
             }

@@ -10,6 +10,10 @@ publish = false
 [lib]
 crate-type = ["cdylib"]
 
+[features]
+default = []
+fault-injection = []
+
 [dependencies]
 napi = { version = "3.14.2", default-features = false, features = ["dyn-symbols", "napi8"] }
 napi-derive = "3.6.12"

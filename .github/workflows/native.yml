@@ -99,6 +99,12 @@ jobs:
         if: runner.os == 'Linux'
         run: node scripts/check-residency-denial.mjs
       - run: pnpm package:smoke
+      - name: Separate Windows fault-injection addon (Node)
+        if: runner.os == 'Windows'
+        run: node scripts/check-windows-job-fault.mjs
+      - name: Separate Windows fault-injection addon (Bun)
+        if: runner.os == 'Windows'
+        run: bun scripts/check-windows-job-fault.mjs --test-only
       - run: pnpm benchmark:imports
       - run: bun scripts/benchmark-imports.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

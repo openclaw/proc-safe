@@ -5,7 +5,6 @@ fn main() {}
 fn main() {
     use std::{
         io::{self, BufRead, Write},
-        process::Command,
         ptr::null,
         thread,
         time::Duration,
@@ -17,12 +16,51 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     match args[1].as_str() {
         "environment" => {
-            println!(
-                "{} {} {:?}",
-                std::env::var("PROC_SAFE_JOB_INHERIT").unwrap_or_else(|_| "empty".into()),
-                std::env::vars_os().count(),
-                std::env::vars_os().map(|(key, _)| key).collect::<Vec<_>>()
-            );
+            fn json(value: &str) -> String {
+                let mut out = String::from("\"");
+                for c in value.chars() {
+                    match c {
+                        '\\' => out.push_str("\\\\"),
+                        '"' => out.push_str("\\\""),
+                        c if c.is_control() => out.push_str(&format!("\\u{:04x}", c as u32)),
+                        c => out.push(c),
+                    }
+                }
+                out.push('"');
+                out
+            }
+            let keys = std::env::vars_os()
+                .map(|(key, _)| json(&key.to_string_lossy()))
+                .collect::<Vec<_>>()
+                .join(",");
+            // Only requested synthetic test values are printed, never inherited credentials.
+            let requested = args[2..]
+                .iter()
+                .map(|key| {
+                    let value = std::env::var(key)
+                        .ok()
+                        .map_or_else(|| "null".into(), |v| json(&v));
+                    format!("{}:{value}", json(key))
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            println!("{{\"keys\":[{keys}],\"requested\":{{{requested}}}}}");
+        }
+        "handle-count" => {
+            let process = unsafe {
+                OpenProcess(
+                    PROCESS_QUERY_LIMITED_INFORMATION,
+                    0,
+                    args[2].parse().unwrap(),
+                )
+            };
+            assert!(!process.is_null());
+            let mut count = 0;
+            assert_ne!(unsafe { GetProcessHandleCount(process, &mut count) }, 0);
+            unsafe {
+                CloseHandle(process);
+            }
+            println!("{count}");
         }
         "membership" => {
             let mut inside = 0;
@@ -68,42 +106,6 @@ fn main() {
                     _ => panic!("unknown request"),
                 }
             }
-        }
-        "restricted-run" => {
-            // Raw creation escapes libuv's silent-breakaway job before installing UI limits.
-            let result = Command::new(std::env::current_exe().unwrap())
-                .arg("restricted-exec")
-                .args(&args[2..])
-                .status()
-                .unwrap();
-            std::process::exit(result.code().unwrap_or(1));
-        }
-        "restricted-exec" => {
-            let job = unsafe { CreateJobObjectW(null(), null()) };
-            assert!(!job.is_null());
-            let limits = JOBOBJECT_BASIC_UI_RESTRICTIONS {
-                UIRestrictionsClass: JOB_OBJECT_UILIMIT_HANDLES,
-            };
-            assert_ne!(
-                unsafe {
-                    SetInformationJobObject(
-                        job,
-                        JobObjectBasicUIRestrictions,
-                        (&limits as *const JOBOBJECT_BASIC_UI_RESTRICTIONS).cast(),
-                        std::mem::size_of_val(&limits) as u32,
-                    )
-                },
-                0
-            );
-            assert_ne!(
-                unsafe { AssignProcessToJobObject(job, GetCurrentProcess()) },
-                0
-            );
-            let result = Command::new(&args[2]).args(&args[3..]).status().unwrap();
-            unsafe {
-                CloseHandle(job);
-            }
-            std::process::exit(result.code().unwrap_or(1));
         }
         "tree" => {
             let executable = std::env::current_exe().unwrap();

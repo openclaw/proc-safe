@@ -77,7 +77,11 @@ is not authority to act on a PID. Accounting and enumeration do not wait for ext
 `spawn` uses an explicit executable and raw Windows command line; quoting and shell choice
 belong to the caller. It supplies atomic job admission and an inherited-handle allowlist.
 The child receives NUL stdin and owned stdout/stderr pipes, starts in a new process group,
-and has no console window. Omitted environment inherits; `{}` is an empty environment.
+and has no console window. Omitted environment inherits; a supplied environment replaces
+the block passed to Windows.
+proc-safe passes exactly the caller's entries (an empty block for `{}`); Windows may add
+loader/platform variables in the child, such as `PROCESSOR_ARCHITECTURE`. See Microsoft's
+[architecture environment documentation](https://learn.microsoft.com/en-us/windows/win32/winprog64/wow64-implementation-details).
 Environment names containing `=` or duplicate names ignoring case are rejected. NULs are
 rejected in strings. `cwd` is optional. No shell fallback or post-launch admission is used.
 
@@ -115,3 +119,8 @@ Bun. Each exercises main-thread and Worker owners, output drainage, retained exi
 exit code 259, named jobs, cancellation, detached descendants, output EOF before extinction,
 nested jobs, Worker cleanup, process death, retained process lifetime, remote-handle rollback,
 and owner death during handoff. An independent Rust fixture supplies descendants and owners.
+
+The `fault-injection` Cargo feature is off by default. Windows CI builds its addon in a
+separate target directory and tests post-duplication rollback on Node and Bun, both on the
+main thread and in a Worker. The production build and package collector reject artifacts
+containing the test-only fault export; platform packages never receive this addon.

@@ -2,15 +2,26 @@ import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
 import { once } from "node:events";
 import { createInterface } from "node:readline";
-import { mkdtempSync, readFileSync, existsSync, rmSync } from "node:fs";
+import { mkdtempSync, existsSync, rmSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Worker, isMainThread, parentPort } from "node:worker_threads";
+import { Worker, isMainThread, parentPort, threadId, SHARE_ENV } from "node:worker_threads";
 import { WindowsJob, PinnedProcess, bindCurrentProcessLifetimeTo, retainCurrentProcessJobUntilExit, isCurrentProcessInJob, isSupported } from "../dist/windows-job.js";
 
 const fixture = resolve(`target/${process.arch === "arm64" ? "aarch64" : "x86_64"}-pc-windows-msvc/release/proc-safe-job-fixture.exe`);
 const entry = fileURLToPath(import.meta.url);
+let injectAssignmentFailure;
+if (process.env.PROC_SAFE_TEST_JOB_FAULT_ADDON) {
+  // Test harness only: the production loader has no override or fault configuration.
+  const require = createRequire(import.meta.url);
+  const nativePath = require.resolve(`@openclaw/proc-safe-win32-${process.arch}-msvc`);
+  const injected = require(process.env.PROC_SAFE_TEST_JOB_FAULT_ADDON);
+  injectAssignmentFailure = injected.failNextWindowsJobAssignment;
+  assert.equal(typeof injectAssignmentFailure, "function");
+  require.cache[nativePath] = { id: nativePath, filename: nativePath, loaded: true, exports: injected };
+}
 const pause = () => new Promise(r => setTimeout(r, 5));
 async function until(fn) {
   const deadline = performance.now() + 8000;
@@ -33,11 +44,9 @@ async function drain(child) {
   });
   return { out, err, code };
 }
-function host(mode, worker = false, extra = [], restricted = false) {
+function host(mode, worker = false, extra = []) {
   const args = [entry, mode, worker ? "worker" : "main", ...extra];
-  const child = restricted
-    ? spawn(fixture, ["restricted-run", process.execPath, ...args], { stdio: ["pipe", "pipe", "pipe"] })
-    : spawn(process.execPath, args, { stdio: ["pipe", "pipe", "pipe"] });
+  const child = spawn(process.execPath, args, { stdio: ["pipe", "pipe", "pipe"] });
   const lines = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
   let errors = "";
   child.stderr.on("data", b => errors += b);
@@ -50,7 +59,10 @@ async function childMode(mode) {
     const owner = PinnedProcess.open(Number(process.argv[4]));
     assert.ok(owner);
     if (mode === "fail-bind") {
-      assert.throws(() => bindCurrentProcessLifetimeTo(owner), e => e.code === "access-denied" && e.message.includes("AssignProcessToJobObject"));
+      const before = isCurrentProcessInJob();
+      injectAssignmentFailure();
+      assert.throws(() => bindCurrentProcessLifetimeTo(owner), e => e.code === "operation-failed" && e.message.includes("injected job assignment failure"));
+      assert.equal(isCurrentProcessInJob(), before);
       owner.close();
       console.log("rolled-back");
       return;
@@ -181,25 +193,73 @@ async function operations() {
     await until(() => descendant.identity.exited);
     descendant.close(); root.close();
   } finally { rmSync(dir, { recursive: true, force: true }); }
+  await exitedOwners();
 }
 
 async function environments() {
   const job = WindowsJob.create();
+  const sentinel = `PROC_SAFE_JOB_PARENT_${process.pid}_${threadId}`;
+  const explicit = { PROC_SAFE_JOB_EXPLICIT: "explicit-value", PROC_SAFE_JOB_SECOND: "second-value" };
+  const requested = [sentinel, ...Object.keys(explicit)];
+  // Windows may supply architecture metadata even for an explicit empty block.
+  // https://learn.microsoft.com/en-us/windows/win32/winprog64/wow64-implementation-details
+  const osInjected = new Set(["PROCESSOR_ARCHITECTURE"]);
   try {
-    for (const env of [undefined, {}]) {
-      process.env.PROC_SAFE_JOB_INHERIT = "yes";
+    process.env[sentinel] = "parent-only";
+    for (const env of [undefined, {}, explicit]) {
       // The fixture observes the actual environment without Node's SystemRoot requirement.
-      const c = job.spawn({ executable: fixture, commandLine: [fixture, "environment"].map(quote).join(" "), env });
+      const c = job.spawn({ executable: fixture, commandLine: [fixture, "environment", ...requested].map(quote).join(" "), env });
       try {
         const observed = await drain(c);
         assert.equal(observed.code, 0, observed.err.toString());
-        const [value, count] = observed.out.toString().trim().split(" ");
-        assert.equal(value, env ? "empty" : "yes");
-        if (env) assert.equal(Number(count), 0, observed.out.toString());
-        else assert.ok(Number(count) > 0);
+        const snapshot = JSON.parse(observed.out.toString());
+        assert.equal(snapshot.requested[sentinel], env === undefined ? "parent-only" : null);
+        if (env !== undefined) {
+          assert.ok(snapshot.keys.every(key => Object.hasOwn(env, key) || osInjected.has(key)), JSON.stringify(snapshot.keys));
+          for (const key of Object.keys(explicit)) assert.equal(snapshot.requested[key], env[key] ?? null);
+          for (const key of Object.keys(env)) assert.ok(snapshot.keys.includes(key));
+        } else { assert.ok(snapshot.keys.includes(sentinel)); }
       } finally { c.close(); }
     }
-  } finally { delete process.env.PROC_SAFE_JOB_INHERIT; job.close(); }
+  } finally { delete process.env[sentinel]; job.close(); }
+}
+
+async function exitedOwners() {
+  for (const openAfterExit of [false, true]) {
+    const child = spawn(fixture, ["owner"], { stdio: ["pipe", "pipe", "inherit"] });
+    const exit = once(child, "exit");
+    const input = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
+    assert.equal((await input.next()).value, "ready");
+    const retained = PinnedProcess.open(child.pid);
+    let owner = retained;
+    try {
+      assert.equal(retained.identity.exited, false);
+      child.stdin.write("exit\n"); await exit;
+      if (openAfterExit) owner = PinnedProcess.open(child.pid);
+      assert.equal(owner.identity.exited, true);
+      const count = () => Number(execFileSync(fixture, ["handle-count", String(child.pid)], { encoding: "utf8" }).trim());
+      const beforeCount = count();
+      const beforeJob = isCurrentProcessInJob();
+      assert.throws(() => bindCurrentProcessLifetimeTo(owner), e => e.code === "operation-failed" && e.message.includes("exited"));
+      assert.equal(isCurrentProcessInJob(), beforeJob);
+      assert.equal(count(), beforeCount);
+    } finally { owner?.close(); retained.close(); child.kill(); await exit; }
+  }
+}
+
+async function faultProof(worker) {
+  const child = spawn(fixture, ["owner"], { stdio: ["pipe", "pipe", "inherit"] });
+  const exit = once(child, "exit");
+  const input = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
+  try {
+    assert.equal((await input.next()).value, "ready");
+    child.stdin.write("count\n"); const before = Number((await input.next()).value);
+    const failed = host("fail-bind", worker, [String(child.pid)]);
+    assert.equal(await failed.next(), "rolled-back");
+    assert.deepEqual(await failed.exit, [0, null], failed.errors());
+    child.stdin.write("count\n");
+    assert.equal(Number((await input.next()).value), before, "failed assignment leaked a remote handle");
+  } finally { child.kill(); await exit; }
 }
 
 async function lifetimes(worker) {
@@ -237,10 +297,6 @@ async function lifetimes(worker) {
   try {
     assert.equal(await next(), "ready");
     owner.stdin.write("count\n"); const before = Number(await next());
-    const failed = host("fail-bind", worker, [String(owner.pid)], true);
-    assert.equal(await failed.next(), "rolled-back");
-    assert.deepEqual(await failed.exit, [0, null], failed.errors());
-    owner.stdin.write("count\n"); assert.equal(Number(await next()), before, "failed assignment leaked a remote handle");
     const bound = host("bind", worker, [String(owner.pid)]);
     assert.equal(await bound.next(), "bound");
     owner.stdin.write("count\n"); assert.equal(Number(await next()), before + 1, "exactly one job handle belongs to owner");
@@ -278,11 +334,15 @@ if (isMainThread && process.argv[3] === "worker") {
 } else if (mode === "environments") {
   await environments();
   if (isMainThread) {
-    const worker = new Worker(new URL(import.meta.url), { argv: ["environments"] });
+    const worker = new Worker(new URL(import.meta.url), { argv: ["environments"], env: SHARE_ENV });
     const exited = once(worker, "exit");
     await once(worker, "message"); await exited;
     console.log(JSON.stringify({ environments: 2 }));
   } else { parentPort.postMessage("passed"); }
+} else if (mode === "fault-proof") {
+  assert.equal(typeof injectAssignmentFailure, "function");
+  await faultProof(false); await faultProof(true);
+  console.log(JSON.stringify({ faultProof: 2 }));
 } else {
   await operations();
   const worker = new Worker(new URL(import.meta.url), { argv: ["operations"] });
