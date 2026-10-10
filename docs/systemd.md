@@ -27,14 +27,15 @@ const version = await bus.getProperty({
 
 ```ts
 type SystemdPeer = { readonly pid: number; readonly uid: number };
+type SystemdConnectOptions = { readonly timeoutMs: number };
 type SystemdCallOptions = { readonly timeoutMs: number; readonly replyBudgetBytes?: number };
 interface AuthenticatedSystemdBus extends SystemdBus { readonly peer: SystemdPeer }
 
 class SystemdBus implements AsyncDisposable {
-  static connectUserManager(address: string, options: SystemdCallOptions): Promise<AuthenticatedSystemdBus>;
-  static connectPrivatePeer(address: string, options: SystemdCallOptions): Promise<AuthenticatedSystemdBus>;
-  static connectBroker(address: string, options: SystemdCallOptions): Promise<SystemdBus>;
-  static connectMachineBroker(machine: string, options: SystemdCallOptions): Promise<SystemdBus>;
+  static connectUserManager(address: string, options: SystemdConnectOptions): Promise<AuthenticatedSystemdBus>;
+  static connectPrivatePeer(address: string, options: SystemdConnectOptions): Promise<AuthenticatedSystemdBus>;
+  static connectBroker(address: string, options: SystemdConnectOptions): Promise<SystemdBus>;
+  static connectMachineBroker(machine: string, options: SystemdConnectOptions): Promise<SystemdBus>;
   getProperty<Signature extends SystemdSignature>(target: SystemdTarget, signature: Signature, options: SystemdCallOptions): Promise<SystemdValueFor<Signature>>;
   call(target: SystemdTarget, args: readonly SystemdArg[], options: SystemdCallOptions): Promise<SystemdValue>;
   close(): Promise<void>;
@@ -115,6 +116,10 @@ unrelated failures into absence. Access refusal maps to `"access-denied"`, timeo
 to `"timeout"`, and other remote errors to `"operation-failed"`.
 
 ## Time, budgets, and disposal
+
+All four factories accept `SystemdConnectOptions`, containing only `timeoutMs`.
+Property reads and method calls accept `SystemdCallOptions`, which additionally
+allows a per-reply `replyBudgetBytes`.
 
 `timeoutMs` must be finite and positive. Its relative native monotonic deadline
 starts at submission and includes time waiting behind other requests. There is

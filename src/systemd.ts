@@ -4,6 +4,7 @@ import { getNativeBinding } from "./native.js";
 import type { NativeSystemdBus } from "./native-binding.js";
 
 export type SystemdPeer = { readonly pid: number; readonly uid: number };
+export type SystemdConnectOptions = { readonly timeoutMs: number };
 export type SystemdCallOptions = { readonly timeoutMs: number; readonly replyBudgetBytes?: number };
 type ScalarSignature = "s" | "o" | "u" | "i" | "t" | "b";
 type StructSignature = "(sb)" | "(sus)" | "(sasbttttuii)";
@@ -48,13 +49,13 @@ function invalid(message: string): never { throw new ProcSafeError("invalid-argu
 function text(value: string, name: string): void {
   if (typeof value !== "string" || value.length === 0 || value.includes("\0")) invalid(`${name} must be a nonempty NUL-free string`);
 }
-function options(value: SystemdCallOptions): number {
+function validateOptions(value: SystemdCallOptions): number {
   if (!value || !Number.isFinite(value.timeoutMs) || value.timeoutMs <= 0) invalid("timeoutMs must be finite and positive");
   const budget = value.replyBudgetBytes ?? 1024 * 1024;
   if (!Number.isSafeInteger(budget) || budget < 1) invalid("replyBudgetBytes must be a positive safe integer");
   return budget;
 }
-function target(value: SystemdTarget): void {
+function validateTarget(value: SystemdTarget): void {
   if (!value) invalid("target is required");
   text(value.path, "path"); text(value.interface, "interface"); text(value.member, "member");
   if (value.destination !== undefined) text(value.destination, "destination");
@@ -72,13 +73,13 @@ export class SystemdBus implements AsyncDisposable {
     this.#native = native;
   }
 
-  static async #connect(mode: string, address: string, value: SystemdCallOptions): Promise<SystemdBus> {
-    options(value); text(address, mode === "machine" ? "machine" : "address");
+  static async #connect(mode: string, address: string, options: SystemdConnectOptions): Promise<SystemdBus> {
+    validateOptions(options); text(address, mode === "machine" ? "machine" : "address");
     if (process.platform !== "linux") throw new ProcSafeError("unsupported-platform", "systemd is supported only on Linux");
     const connect = getNativeBinding()?.connectSystemd;
     if (!connect) throw new ProcSafeError("helper-unavailable", "native systemd support is unavailable");
     try {
-      const native = await connect(mode, address, value.timeoutMs);
+      const native = await connect(mode, address, options.timeoutMs);
       const bus = new SystemdBus(constructorKey, native);
       if (mode === "private" || mode === "user") {
         if (!Number.isInteger(native.peerPid) || native.peerPid! <= 0 || !Number.isInteger(native.peerUid) || native.peerUid! < 0 || native.peerUid! >= 0xffffffff) {
@@ -93,30 +94,30 @@ export class SystemdBus implements AsyncDisposable {
   }
 
   /** Direct private user-manager socket, authenticated just like the existing private-peer route. */
-  static async connectUserManager(address: string, value: SystemdCallOptions): Promise<AuthenticatedSystemdBus> {
-    return await this.#connect("user", address, value) as AuthenticatedSystemdBus;
+  static async connectUserManager(address: string, options: SystemdConnectOptions): Promise<AuthenticatedSystemdBus> {
+    return await this.#connect("user", address, options) as AuthenticatedSystemdBus;
   }
-  static async connectBroker(address: string, value: SystemdCallOptions): Promise<SystemdBus> {
-    return await this.#connect("broker", address, value);
+  static async connectBroker(address: string, options: SystemdConnectOptions): Promise<SystemdBus> {
+    return await this.#connect("broker", address, options);
   }
-  static async connectMachineBroker(machine: string, value: SystemdCallOptions): Promise<SystemdBus> {
-    return await this.#connect("machine", machine, value);
+  static async connectMachineBroker(machine: string, options: SystemdConnectOptions): Promise<SystemdBus> {
+    return await this.#connect("machine", machine, options);
   }
-  static async connectPrivatePeer(address: string, value: SystemdCallOptions): Promise<AuthenticatedSystemdBus> {
-    return await this.#connect("private", address, value) as AuthenticatedSystemdBus;
+  static async connectPrivatePeer(address: string, options: SystemdConnectOptions): Promise<AuthenticatedSystemdBus> {
+    return await this.#connect("private", address, options) as AuthenticatedSystemdBus;
   }
 
-  getProperty<Signature extends SystemdSignature>(at: SystemdTarget, signature: Signature, value: SystemdCallOptions): Promise<SystemdValueFor<Signature>>;
-  async getProperty(at: SystemdTarget, signature: SystemdSignature, value: SystemdCallOptions): Promise<SystemdValue> {
-    const budget = options(value); target(at);
+  getProperty<Signature extends SystemdSignature>(target: SystemdTarget, signature: Signature, options: SystemdCallOptions): Promise<SystemdValueFor<Signature>>;
+  async getProperty(target: SystemdTarget, signature: SystemdSignature, options: SystemdCallOptions): Promise<SystemdValue> {
+    const budget = validateOptions(options); validateTarget(target);
     if (!signatures.has(signature)) invalid("unsupported property signature");
     if (this.#closing) throw new ProcSafeError("operation-failed", "systemd connection is closed");
-    try { return await this.#native.getProperty(at.destination, at.path, at.interface, at.member, signature, value.timeoutMs, budget); }
+    try { return await this.#native.getProperty(target.destination, target.path, target.interface, target.member, signature, options.timeoutMs, budget); }
     catch (error) { throw fromNativeError(error); }
   }
 
-  async call(at: SystemdTarget, args: readonly SystemdArg[], value: SystemdCallOptions): Promise<SystemdValue> {
-    const budget = options(value); target(at);
+  async call(target: SystemdTarget, args: readonly SystemdArg[], options: SystemdCallOptions): Promise<SystemdValue> {
+    const budget = validateOptions(options); validateTarget(target);
     if (!Array.isArray(args)) invalid("args must be an array");
     const encoded = args.map(arg => {
       if (!arg) invalid("invalid systemd argument");
@@ -136,7 +137,7 @@ export class SystemdBus implements AsyncDisposable {
       return { type: arg.type, value: String(arg.value) };
     });
     if (this.#closing) throw new ProcSafeError("operation-failed", "systemd connection is closed");
-    try { return await this.#native.call(at.destination, at.path, at.interface, at.member, encoded, value.timeoutMs, budget); }
+    try { return await this.#native.call(target.destination, target.path, target.interface, target.member, encoded, options.timeoutMs, budget); }
     catch (error) { throw fromNativeError(error); }
   }
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Clarify systemd declarations with `target` and `options` parameter names and timeout-only `SystemdConnectOptions` for connection factories; reply budgets remain in `SystemdCallOptions` for property reads and method calls.
+
 - Stabilize Linux epoch birth estimates with realtime/boottime samples, removing the extra second of `btime` truncation while preserving exact tick-quantized process identity.
 
 - Infer systemd property value types from their signatures, and distinguish user-manager ownership refusals with `peer-uid-mismatch` details containing the expected and actual effective UIDs.

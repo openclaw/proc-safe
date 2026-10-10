@@ -1,5 +1,15 @@
 import { expectTypeOf } from "vitest";
-import type { SystemdBus, SystemdSignature, SystemdTarget, SystemdValue, SystemdValueFor } from "../src/systemd.js";
+import { SystemdBus } from "../src/systemd.js";
+import type { SystemdConnectOptions, SystemdCallOptions, SystemdSignature, SystemdTarget, SystemdValue, SystemdValueFor } from "../src/systemd.js";
+
+expectTypeOf<keyof SystemdConnectOptions>().toEqualTypeOf<"timeoutMs">();
+expectTypeOf<SystemdConnectOptions>().toEqualTypeOf<{ readonly timeoutMs: number }>();
+for (const factory of ["connectUserManager", "connectBroker", "connectMachineBroker", "connectPrivatePeer"] as const) {
+  expectTypeOf<Parameters<typeof SystemdBus[typeof factory]>[1]>().toEqualTypeOf<SystemdConnectOptions>();
+  SystemdBus[factory]("address", { timeoutMs: 1000 });
+  // @ts-expect-error Connection factories do not accept a reply budget.
+  SystemdBus[factory]("address", { timeoutMs: 1000, replyBudgetBytes: 1024 });
+}
 
 type ExpectedValues = {
   s: string;
@@ -34,6 +44,9 @@ declare const signature: SystemdSignature;
 expectTypeOf(bus.getProperty(target, signature, options)).toEqualTypeOf<Promise<SystemdValueFor<SystemdSignature>>>();
 expectTypeOf<SystemdValueFor<SystemdSignature>>().toExtend<SystemdValue>();
 expectTypeOf(bus.call(target, [], options)).toEqualTypeOf<Promise<SystemdValue>>();
+const callOptions: SystemdCallOptions = { timeoutMs: 1000, replyBudgetBytes: 1024 };
+expectTypeOf(bus.getProperty(target, "t", callOptions)).toEqualTypeOf<Promise<bigint>>();
+expectTypeOf(bus.call(target, [], callOptions)).toEqualTypeOf<Promise<SystemdValue>>();
 // @ts-expect-error Unsupported signatures must still be rejected at compile time.
 bus.getProperty(target, "v", options);
 // @ts-expect-error Type arguments cannot override the supplied wire signature.
