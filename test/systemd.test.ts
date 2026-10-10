@@ -28,11 +28,12 @@ describe("systemd contracts", () => {
     `], { encoding: "utf8", env: { ...process.env, PROC_SAFE_NATIVE: "off" } });
     expect(output.trim()).toBe("off");
   });
-  test.runIf(process.env.PROC_SAFE_SYSTEMD_PROOF === "1")("real user manager and private sd-bus peer on main and Worker", () => {
-    const output = execFileSync(process.execPath, ["scripts/systemd-proof.mjs"], { encoding: "utf8", timeout: 20_000 });
+  test.runIf(process.env.PROC_SAFE_SYSTEMD_PROOF === "1").each(["main", "worker", "flood", "worker-flood"])("real systemd boundary: %s", scenario => {
+    const output = execFileSync(process.execPath, ["scripts/systemd-proof.mjs", scenario], { encoding: "utf8", timeout: 20_000 });
     const result = JSON.parse(output);
-    expect(result.mainPassed).toBeGreaterThan(35);
-    expect(result.workerPassed).toBe(result.mainPassed);
+    expect(result.scenario).toBe(scenario);
+    expect(result.passed).toBeGreaterThan(35);
+    if (scenario.endsWith("flood")) expect(result.signals).toBe(401_408);
   });
   test.runIf(process.env.PROC_SAFE_SYSTEMD_NO_LIBRARY === "1")("Alpine imports without libsystemd", () => {
     const output = execFileSync(process.execPath, ["--input-type=module", "-e", `

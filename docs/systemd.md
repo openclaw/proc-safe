@@ -133,3 +133,6 @@ Linux GNU CI starts a real user manager and a transient unit with
 real sd-bus peer supplies exact scalar/tuple layouts, reply-budget failures,
 remote errors, delays, queued expiry, and close-while-pending cases. Linux musl
 CI proves import and typed unavailability without installing libsystemd.
+Main-thread, Worker, and their signal-volume regression proofs run as independent
+cases under the default per-test deadline. The flood count exceeds the measured
+undrained queue limit by one complete message batch.

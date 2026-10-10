@@ -47,8 +47,6 @@ export async function prove({ fixtureAddress, fixturePid, stalledAddress, manage
     await fails(() => bus.call(at("Delay"), [{ type: "u", value: 100 }], { timeoutMs: 20 }), "timeout");
     await delay(120);
     same(await bus.call(at("Echo"), [{ type: "s", value: "after timeout" }], options), ["after timeout"]);
-    // Exceed sd-bus's 384K retained-message limit across individually bounded calls.
-    for (let i = 0; i < 64; i++) same(await bus.call(at("Flood"), [{ type: "u", value: 8192 }], options), [8192]);
     const final = bus.call(at("Delay"), [{ type: "u", value: 40 }], options);
     const closing = bus.close();
     same(bus.close(), closing);
@@ -83,7 +81,30 @@ export async function prove({ fixtureAddress, fixturePid, stalledAddress, manage
   }
   return passed;
 }
+// libsystemd 259.5 first fails at 393,216 undrained signals; add an 8,192-signal batch.
+export const FLOOD_SIGNAL_COUNT = 401_408;
+
+export async function proveFlood({ fixtureAddress, fixturePid }, signals = FLOOD_SIGNAL_COUNT) {
+  const bus = await SystemdBus.connectPrivatePeer(fixtureAddress, { timeoutMs: 2000 });
+  let completedSignals = 0;
+  let passed = 0;
+  const target = { path: "/fixture", interface: "org.example.ProcSafe", member: "Flood" };
+  try {
+    assert.deepEqual(bus.peer, { pid: fixturePid, uid: process.geteuid() }); passed++;
+    while (completedSignals < signals) {
+      const count = Math.min(8192, signals - completedSignals);
+      assert.deepEqual(await bus.call(target, [{ type: "u", value: count }], { timeoutMs: 2000 }), [count]);
+      completedSignals += count;
+      passed++;
+    }
+    assert.deepEqual(await bus.call({ ...target, member: "Echo" }, [{ type: "s", value: "after flood" }], { timeoutMs: 2000 }), ["after flood"]); passed++;
+    return passed;
+  } catch (error) {
+    error.completedSignals = completedSignals;
+    throw error;
+  } finally { await bus.close(); }
+}
 if (!isMainThread) {
-  try { parentPort.postMessage({ passed: await prove(workerData) }); }
+  try { parentPort.postMessage({ passed: workerData.scenario === "worker-flood" ? await proveFlood(workerData, workerData.signals) : await prove(workerData) }); }
   catch (error) { throw error; }
 }
