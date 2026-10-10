@@ -62,6 +62,9 @@ jobs:
       - name: Real restricted procfs namespace
         if: runner.os == 'Linux'
         run: node scripts/check-restricted-visibility.mjs
+      - name: Real foreign-file residency denial
+        if: runner.os == 'Linux'
+        run: node scripts/check-residency-denial.mjs
       - run: pnpm package:smoke
       - run: pnpm benchmark:imports
       - run: bun scripts/benchmark-imports.mjs
@@ -104,6 +107,7 @@ jobs:
             pnpm build
             pnpm native:build
             PROC_SAFE_NATIVE=require pnpm test
+            node scripts/check-residency-denial.mjs
             pnpm package:smoke
             bun_arch="$EXPECTED_ARCH"
             if [ "$bun_arch" = arm64 ]; then bun_arch=aarch64; fi

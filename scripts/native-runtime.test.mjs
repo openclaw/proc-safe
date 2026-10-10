@@ -5,3 +5,7 @@ import { test } from "node:test";
 test("native identity, lifecycle, ancestry, coalition, and Worker boundaries", async () => {
   await import("./runtime-proof.mjs");
 });
+
+test("native diagnostics and test fixture boundaries", async () => {
+  await import("./p2-proof.mjs");
+});

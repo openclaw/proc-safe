@@ -40,6 +40,21 @@ A zero resource-coalition ID or a proven missing process returns `null`. Missing
 XPC symbols only omit the optional name; failure of the kernel observation throws.
 No service-membership policy is applied. Private XPC availability is not guaranteed.
 
+`@openclaw/proc-safe/diagnostics` exports [Linux page-cache observations](diagnostics.md):
+
+```ts
+type PageCacheResidency = {
+  readonly pageSize: number;
+  readonly sampledPages: number;
+  readonly residentPages: number;
+};
+function samplePageCacheResidency(fd: number, options: { maxPages: number }): PageCacheResidency;
+function isSupported(): boolean;
+```
+
+`@openclaw/proc-safe/test-support` exports [test-only native fixtures](test-support.md)
+for Linux group-kill denial and raw Windows launches/console observation.
+
 The root and `./errors` export `ProcSafeError` and `ProcSafeErrorCode`. Errors accept
 `(code, message, { cause?, details? })`. Stable codes are `unsupported-platform`,
 `helper-unavailable`, `access-denied`, `layout-mismatch`, `timeout`, `incomplete`,

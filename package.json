@@ -43,7 +43,15 @@
       "types": "./dist/errors.d.ts",
       "default": "./dist/errors.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./diagnostics": {
+      "types": "./dist/diagnostics.d.ts",
+      "default": "./dist/diagnostics.js"
+    },
+    "./test-support": {
+      "types": "./dist/test-support.d.ts",
+      "default": "./dist/test-support.js"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
