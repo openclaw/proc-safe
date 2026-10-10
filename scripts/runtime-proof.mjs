@@ -29,11 +29,18 @@ assert.ok(self.startTimeMicros <= Date.now() * 1000);
 assert.ok(self.startTimeResolutionMicros > 0);
 assertSameIdentity(readProcessIdentity(process.pid), self);
 assert.equal(readProcessAncestry(process.pid, { maxDepth: 1 }).length, 1);
-// The default walk must complete for an unprivileged caller and never include PID 0/1.
-const fullAncestry = readProcessAncestry(process.pid);
-assert.ok(fullAncestry.length >= 1);
-assert.equal(fullAncestry[0].pid, process.pid);
-assert.ok(fullAncestry.every(identity => identity.pid > 1));
+// The default walk never reads PID 0/1. With ordinary visibility it must complete; under the
+// restricted-visibility harness a hidden (root-owned) parent is unknown, so it throws instead.
+try {
+  const fullAncestry = readProcessAncestry(process.pid);
+  assert.ok(fullAncestry.length >= 1);
+  assert.equal(fullAncestry[0].pid, process.pid);
+  assert.ok(fullAncestry.every(identity => identity.pid > 1));
+} catch (error) {
+  if (process.env.PROC_SAFE_TEST_RESTRICTED !== "1") throw error;
+  assert.equal(error?.code, "access-denied");
+  assert.equal(error?.details?.reason, "visibility-policy");
+}
 
 const earliest = Date.now() * 1000;
 let childIdentity;
