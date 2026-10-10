@@ -4,12 +4,13 @@ import { once } from "node:events";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
+import { hostNativeTarget } from "./native-targets.mjs";
 import { readProcessIdentity } from "../dist/identity.js";
 
 export async function proveRetainedExit() {
-  const helper = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-File",
-    fileURLToPath(new URL("../test/fixtures/windows-retained-exit.ps1", import.meta.url)),
-    "-NodePath", process.versions.bun ? "node.exe" : process.execPath], { stdio: ["pipe", "pipe", "inherit"] });
+  const target = hostNativeTarget();
+  const fixture = fileURLToPath(new URL(`../target/${target.rust}/release/proc-safe-retained-fixture.exe`, import.meta.url));
+  const helper = spawn(fixture, [process.versions.bun ? "node.exe" : process.execPath], { stdio: ["pipe", "pipe", "inherit"] });
   const closed = once(helper, "close");
   try {
     const lines = createInterface({ input: helper.stdout })[Symbol.asyncIterator]();
