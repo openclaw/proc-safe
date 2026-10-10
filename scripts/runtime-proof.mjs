@@ -9,7 +9,6 @@ import { readProcessIdentity, readProcessAncestry, isSupported } from "../dist/i
 import * as darwin from "../dist/darwin.js";
 import { proveZombie } from "./zombie-proof.mjs";
 import { readAfterClose } from "./identity-proof-assertions.mjs";
-import { provePermissionDenied } from "./permission-denial-proof.mjs";
 import { proveRetainedExit } from "./windows-exit-proof.mjs";
 
 assert.equal(isSupported(), true, "this runtime lane requires working native identity");
@@ -83,7 +82,7 @@ if (remaining.restricted) {
   assert.deepEqual(readProcessAncestry(child.pid, { maxDepth: 1 }), remaining.result ? [remaining.result] : []);
 }
 if (process.platform !== "win32") await proveZombie();
-else { await proveRetainedExit(); await provePermissionDenied(4); }
+else await proveRetainedExit();
 
 const worker = new Worker(new URL("./worker-proof.mjs", import.meta.url));
 const workerExit = once(worker, "exit");

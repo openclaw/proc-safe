@@ -53,6 +53,9 @@ jobs:
         env:
           PROC_SAFE_NATIVE: require
         run: pnpm test:bun
+      - name: Real Windows permission denial
+        if: runner.os == 'Windows'
+        run: node scripts/check-windows-denial.mjs
       - name: Real Darwin permission denial
         if: runner.os == 'macOS'
         run: node scripts/check-darwin-denial.mjs
