@@ -94,6 +94,95 @@ pub struct NativePinnedProcess {
     handle: Handle,
     pid: u32,
     image: String,
+    access: PinAccess,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum PinAccess {
+    Observe,
+    LifetimeOwner,
+    JobMember,
+}
+
+impl PinAccess {
+    fn parse(value: &str) -> Result<Self> {
+        match value {
+            "observe" => Ok(Self::Observe),
+            "lifetime-owner" => Ok(Self::LifetimeOwner),
+            "job-member" => Ok(Self::JobMember),
+            _ => Err(failure("invalid-argument", "invalid pinned process access")),
+        }
+    }
+    fn name(self) -> &'static str {
+        match self {
+            Self::Observe => "observe",
+            Self::LifetimeOwner => "lifetime-owner",
+            Self::JobMember => "job-member",
+        }
+    }
+    fn mask(self) -> u32 {
+        PROCESS_QUERY_LIMITED_INFORMATION
+            | match self {
+                Self::Observe => 0,
+                Self::LifetimeOwner => PROCESS_DUP_HANDLE | PROCESS_SYNCHRONIZE,
+                Self::JobMember => PROCESS_SET_QUOTA | PROCESS_TERMINATE,
+            }
+    }
+    fn require(self, required: Self) -> Result<()> {
+        if self != required {
+            return Err(failure(
+                "invalid-argument",
+                format!(
+                    "insufficient-pin-access[{},{}]",
+                    required.name(),
+                    self.name()
+                ),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Test-only observation of the kernel's granted mask, not the requested mask.
+#[cfg(feature = "fault-injection")]
+#[napi]
+pub fn inspect_windows_pin_access(process: &NativePinnedProcess) -> Result<u32> {
+    #[repr(C)]
+    struct ObjectBasicInformation {
+        attributes: u32,
+        granted_access: u32,
+        handle_count: u32,
+        pointer_count: u32,
+        reserved: [u32; 10],
+    }
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn NtQueryObject(
+            handle: HANDLE,
+            class: u32,
+            information: *mut c_void,
+            length: u32,
+            returned: *mut u32,
+        ) -> i32;
+    }
+    let mut info: ObjectBasicInformation = unsafe { zeroed() };
+    let mut returned = 0;
+    let status = unsafe {
+        NtQueryObject(
+            process.handle.get()?,
+            0, // ObjectBasicInformation
+            (&mut info as *mut ObjectBasicInformation).cast(),
+            size_of::<ObjectBasicInformation>() as u32,
+            &mut returned,
+        )
+    };
+    if status < 0 || returned as usize != size_of::<ObjectBasicInformation>() {
+        return Err(failure(
+            "operation-failed",
+            "cannot inspect granted pin access",
+        ));
+    }
+    Ok(info.granted_access)
 }
 
 #[napi]
@@ -101,22 +190,14 @@ pub fn open_pinned_process(
     pid: u32,
     image_path: Option<String>,
     start_time_micros: Option<f64>,
+    access: String,
 ) -> Result<Option<NativePinnedProcess>> {
     if pid == 0 {
         return Err(failure("invalid-argument", "invalid PID"));
     }
-    // Acquire all authority once: later operations never reopen this PID.
-    let raw = unsafe {
-        OpenProcess(
-            PROCESS_QUERY_LIMITED_INFORMATION
-                | PROCESS_DUP_HANDLE
-                | PROCESS_SET_QUOTA
-                | PROCESS_TERMINATE
-                | PROCESS_SYNCHRONIZE,
-            0,
-            pid,
-        )
-    };
+    let access = PinAccess::parse(&access)?;
+    // Acquire only the intended authority once; later operations never reopen this PID.
+    let raw = unsafe { OpenProcess(access.mask(), 0, pid) };
     if raw.is_null() && unsafe { GetLastError() } == ERROR_INVALID_PARAMETER {
         return Ok(None);
     }
@@ -141,11 +222,21 @@ pub fn open_pinned_process(
             "pinned process identity does not match expectations",
         ));
     }
-    Ok(Some(NativePinnedProcess { handle, pid, image }))
+    Ok(Some(NativePinnedProcess {
+        handle,
+        pid,
+        image,
+        access,
+    }))
 }
 
 #[napi]
 impl NativePinnedProcess {
+    #[napi(getter)]
+    pub fn access(&self) -> Result<String> {
+        self.handle.get()?;
+        Ok(self.access.name().into())
+    }
     #[napi(getter)]
     pub fn identity(&self) -> Result<ProcessIdentity> {
         read_handle(self.pid, self.handle.get()?)
@@ -161,6 +252,7 @@ impl NativePinnedProcess {
     }
     #[napi]
     pub fn bind_lifetime(&self) -> Result<()> {
+        self.access.require(PinAccess::LifetimeOwner)?;
         let owner = self.handle.get()?;
         live(owner)?;
         let job = create_job(None, true)?;
@@ -296,8 +388,12 @@ impl NativeJob {
     }
     #[napi]
     pub fn assign(&self, process: &NativePinnedProcess) -> Result<()> {
+        process.access.require(PinAccess::JobMember)?;
         let handle = process.handle.get()?;
-        live(handle)?;
+        // Job-member pins intentionally lack SYNCHRONIZE; query exit through the same handle.
+        if read_handle(process.pid, handle)?.exited {
+            return Err(failure("operation-failed", "pinned process has exited"));
+        }
         if unsafe { AssignProcessToJobObject(self.handle.get()?, handle) } == 0 {
             return Err(win_error("AssignProcessToJobObject"));
         }

@@ -33,6 +33,7 @@ export interface NativeJobChild {
 export interface NativePinnedProcess {
   readonly identity: ProcessIdentity;
   readonly imagePath: string;
+  readonly access: "observe" | "lifetime-owner" | "job-member";
   bindLifetime(): void;
   close(): void;
 }
@@ -66,6 +67,6 @@ export interface NativeBinding {
   }[];
   createWindowsJob?(name: string | undefined, killOnJobClose: boolean): NativeJob;
   openWindowsJob?(name: string): NativeJob | null;
-  openPinnedProcess?(pid: number, imagePath: string | undefined, startTimeMicros: number | undefined): NativePinnedProcess | null;
+  openPinnedProcess?(pid: number, imagePath: string | undefined, startTimeMicros: number | undefined, access: string): NativePinnedProcess | null;
   isCurrentProcessInJob?(): boolean;
 }

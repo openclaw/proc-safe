@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Open Windows process pins with least-privilege `observe`, `lifetime-owner`, or `job-member` access (default `observe`); move identity expectations into `options.expect` and reject incompatible operations before side effects.
+
 - Clarify systemd declarations with `target` and `options` parameter names and timeout-only `SystemdConnectOptions` for connection factories; reply budgets remain in `SystemdCallOptions` for property reads and method calls.
 
 - Stabilize Linux epoch birth estimates with realtime/boottime samples, removing the extra second of `btime` truncation while preserving exact tick-quantized process identity.

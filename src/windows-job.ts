@@ -123,18 +123,24 @@ export class PinnedProcess implements Disposable {
     if (token !== key) throw new ProcSafeError("invalid-argument", "use PinnedProcess.open");
     pinned.set(this, native); Object.freeze(this);
   }
-  static open(pid: number, expect?: { imagePath?: string; startTimeMicros?: number }): PinnedProcess | null {
+  static open(pid: number, options?: { expect?: { imagePath?: string; startTimeMicros?: number }; access?: "observe" | "lifetime-owner" | "job-member" }): PinnedProcess | null {
     const native = binding();
     validatePid(pid);
+    const expect = options?.expect;
+    const access = options?.access ?? "observe";
+    if (access !== "observe" && access !== "lifetime-owner" && access !== "job-member") {
+      throw new ProcSafeError("invalid-argument", "access must be observe, lifetime-owner, or job-member");
+    }
     if (expect?.imagePath !== undefined) text(expect.imagePath, "imagePath");
     if (expect?.startTimeMicros !== undefined && (!Number.isSafeInteger(expect.startTimeMicros) || expect.startTimeMicros < 0)) {
       throw new ProcSafeError("invalid-argument", "startTimeMicros must be a nonnegative safe integer");
     }
-    const resource = call(() => native.openPinnedProcess(pid, expect?.imagePath, expect?.startTimeMicros));
+    const resource = call(() => native.openPinnedProcess(pid, expect?.imagePath, expect?.startTimeMicros, access));
     return resource === null ? null : new PinnedProcess(resource, key);
   }
   get identity(): ProcessIdentity { return Object.freeze(call(() => nativeOwner(pinned, this).identity)); }
   get imagePath(): string { return call(() => nativeOwner(pinned, this).imagePath); }
+  get access(): "observe" | "lifetime-owner" | "job-member" { return call(() => nativeOwner(pinned, this).access); }
   close(): void {
     const resource = pinned.get(this);
     if (resource) { pinned.delete(this); call(() => resource.close()); }

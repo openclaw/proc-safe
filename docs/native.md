@@ -15,6 +15,9 @@ HANDLE_LIST to CreateProcessW, so admission precedes execution and only NUL stdi
 the two output writers are inherited. Each pipe has one reader: a peek followed by a read
 bounded to the available bytes cannot wait for a writer. Root exit, pipe EOF, and job
 extinction are separate observations. Pinned processes reuse identity's handle-based reader.
+Their intended access mode determines the exact OpenProcess rights. Native mode checks
+precede job creation, handle duplication, or assignment. Job-member exit checks use the
+retained identity reader so they do not require synchronization rights.
 
 Lifetime binding duplicates a fresh non-inheritable kill-on-close job into a pinned live
 owner before assigning the caller, then releases the caller's handle. Failed admission

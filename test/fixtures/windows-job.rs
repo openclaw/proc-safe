@@ -71,7 +71,55 @@ fn main() {
             let console = unsafe { windows_sys::Win32::System::Console::GetConsoleWindow() };
             println!("{inside} {}", console.is_null());
         }
-        "owner" => {
+        "owner" | "no-duplicate-owner" => {
+            if args[1] == "no-duplicate-owner" {
+                use windows_sys::Win32::Security::*;
+                let mut sid = [0u32; 17];
+                let mut sid_len = std::mem::size_of_val(&sid) as u32;
+                let sid_ptr = sid.as_mut_ptr().cast();
+                assert_ne!(
+                    unsafe {
+                        CreateWellKnownSid(WinWorldSid, std::ptr::null_mut(), sid_ptr, &mut sid_len)
+                    },
+                    0
+                );
+                let mut storage = [0usize; 32];
+                let acl = storage.as_mut_ptr().cast::<ACL>();
+                let mut descriptor: SECURITY_DESCRIPTOR = unsafe { std::mem::zeroed() };
+                let descriptor_ptr = (&mut descriptor as *mut SECURITY_DESCRIPTOR).cast();
+                assert_ne!(
+                    unsafe {
+                        InitializeAcl(acl, std::mem::size_of_val(&storage) as u32, ACL_REVISION)
+                    },
+                    0
+                );
+                assert_ne!(
+                    unsafe { AddAccessDeniedAce(acl, ACL_REVISION, PROCESS_DUP_HANDLE, sid_ptr) },
+                    0
+                );
+                assert_ne!(
+                    unsafe { AddAccessAllowedAce(acl, ACL_REVISION, PROCESS_ALL_ACCESS, sid_ptr) },
+                    0
+                );
+                assert_ne!(
+                    unsafe { InitializeSecurityDescriptor(descriptor_ptr, 1) },
+                    0
+                );
+                assert_ne!(
+                    unsafe { SetSecurityDescriptorDacl(descriptor_ptr, 1, acl, 0) },
+                    0
+                );
+                assert_ne!(
+                    unsafe {
+                        SetKernelObjectSecurity(
+                            GetCurrentProcess(),
+                            DACL_SECURITY_INFORMATION,
+                            descriptor_ptr,
+                        )
+                    },
+                    0
+                );
+            }
             println!("ready");
             io::stdout().flush().unwrap();
             for line in io::stdin().lock().lines() {

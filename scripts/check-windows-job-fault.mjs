@@ -12,6 +12,7 @@ const productionPath = require.resolve(target.package);
 const production = readFileSync(productionPath);
 assert.ok(!production.includes(Buffer.from("failNextWindowsJobAssignment")));
 assert.equal(Object.hasOwn(require(productionPath), "failNextWindowsJobAssignment"), false);
+assert.equal(Object.hasOwn(require(productionPath), "inspectWindowsPinAccess"), false);
 const directory = resolve("target/job-fault");
 const addon = resolve(directory, "proc-safe-job-fault.node");
 if (!process.argv.includes("--test-only")) {
@@ -24,6 +25,6 @@ const result = execFileSync(process.execPath, ["scripts/windows-job-proof.mjs", 
   encoding: "utf8", timeout: 60_000,
   env: { ...process.env, PROC_SAFE_TEST_JOB_FAULT_ADDON: addon, PROC_SAFE_NATIVE: "require" },
 });
-assert.deepEqual(JSON.parse(result), { faultProof: 2 });
+assert.deepEqual(JSON.parse(result), { faultProof: 2, accessProof: 2 });
 assert.deepEqual(readFileSync(productionPath), production, "fault build must not replace production addon");
-console.log("Separate fault addon: main/Worker rollback passed; production artifact excludes fault injection");
+console.log("Separate fault addon: main/Worker rollback and exact granted-access masks passed; production artifact excludes test hooks");

@@ -13,14 +13,21 @@ import { WindowsJob, PinnedProcess, bindCurrentProcessLifetimeTo, retainCurrentP
 const fixture = resolve(`target/${process.arch === "arm64" ? "aarch64" : "x86_64"}-pc-windows-msvc/release/proc-safe-job-fixture.exe`);
 const entry = fileURLToPath(import.meta.url);
 let injectAssignmentFailure;
+let inspectPinAccess;
+let lastNativePin;
 if (process.env.PROC_SAFE_TEST_JOB_FAULT_ADDON) {
   // Test harness only: the production loader has no override or fault configuration.
   const require = createRequire(import.meta.url);
   const nativePath = require.resolve(`@openclaw/proc-safe-win32-${process.arch}-msvc`);
   const injected = require(process.env.PROC_SAFE_TEST_JOB_FAULT_ADDON);
   injectAssignmentFailure = injected.failNextWindowsJobAssignment;
+  inspectPinAccess = injected.inspectWindowsPinAccess;
   assert.equal(typeof injectAssignmentFailure, "function");
-  require.cache[nativePath] = { id: nativePath, filename: nativePath, loaded: true, exports: injected };
+  assert.equal(typeof inspectPinAccess, "function");
+  require.cache[nativePath] = { id: nativePath, filename: nativePath, loaded: true, exports: {
+    ...injected,
+    openPinnedProcess(...args) { return lastNativePin = injected.openPinnedProcess(...args); },
+  } };
 }
 const pause = () => new Promise(r => setTimeout(r, 5));
 async function until(fn) {
@@ -56,7 +63,7 @@ function host(mode, worker = false, extra = []) {
 
 async function childMode(mode) {
   if (mode === "bind" || mode === "fail-bind") {
-    const owner = PinnedProcess.open(Number(process.argv[4]));
+    const owner = PinnedProcess.open(Number(process.argv[4]), { access: "lifetime-owner" });
     assert.ok(owner);
     if (mode === "fail-bind") {
       const before = isCurrentProcessInJob();
@@ -114,9 +121,11 @@ async function operations() {
   assert.equal(self.identity.exited, false);
   assert.equal(self.identity.parentPid, process.ppid);
   assert.ok(Object.isFrozen(self.identity));
-  assert.throws(() => PinnedProcess.open(process.pid, { imagePath: "C:\\wrong.exe" }), e => e.code === "operation-failed");
-  assert.throws(() => PinnedProcess.open(process.pid, { startTimeMicros: self.identity.startTimeMicros + 1 }), e => e.code === "operation-failed");
-  const verified = PinnedProcess.open(process.pid, { imagePath: self.imagePath, startTimeMicros: self.identity.startTimeMicros });
+  assert.equal(self.access, "observe");
+  assert.throws(() => PinnedProcess.open(process.pid, { access: "invalid" }), e => e.code === "invalid-argument");
+  assert.throws(() => PinnedProcess.open(process.pid, { expect: { imagePath: "C:\\wrong.exe" } }), e => e.code === "operation-failed");
+  assert.throws(() => PinnedProcess.open(process.pid, { expect: { startTimeMicros: self.identity.startTimeMicros + 1 } }), e => e.code === "operation-failed");
+  const verified = PinnedProcess.open(process.pid, { expect: { imagePath: self.imagePath, startTimeMicros: self.identity.startTimeMicros } });
   verified.close(); self.close(); self.close();
   assert.throws(() => self.identity, e => e.code === "invalid-argument");
   const name = `Local\\proc-safe-${process.pid}-${isMainThread ? "main" : "worker"}-${Date.now()}`;
@@ -160,7 +169,7 @@ async function operations() {
   const externalExit = once(external, "exit");
   const externalLines = createInterface({ input: external.stdout })[Symbol.asyncIterator]();
   assert.equal((await externalLines.next()).value, "ready");
-  const externalPin = PinnedProcess.open(external.pid);
+  const externalPin = PinnedProcess.open(external.pid, { access: "job-member" });
   const admitted = WindowsJob.create();
   admitted.assignProcess(externalPin);
   assert.ok(admitted.processIds().includes(external.pid));
@@ -194,6 +203,57 @@ async function operations() {
     descendant.close(); root.close();
   } finally { rmSync(dir, { recursive: true, force: true }); }
   await exitedOwners();
+  await accessModes();
+}
+
+async function accessModes() {
+  const target = spawn(fixture, ["owner"], { stdio: ["pipe", "pipe", "inherit"] });
+  const exit = once(target, "exit");
+  const input = createInterface({ input: target.stdout })[Symbol.asyncIterator]();
+  const job = WindowsJob.create();
+  try {
+    assert.equal((await input.next()).value, "ready");
+    target.stdin.write("count\n"); const beforeCount = Number((await input.next()).value);
+    const beforeJob = isCurrentProcessInJob();
+    for (const [access, mask] of [["observe", 0x1000], ["lifetime-owner", 0x101040], ["job-member", 0x1101]]) {
+      const pin = PinnedProcess.open(target.pid, { access });
+      try {
+        assert.equal(pin.access, access);
+        assert.equal(pin.identity.exited, false);
+        assert.ok(pin.imagePath.endsWith("proc-safe-job-fixture.exe"));
+        if (inspectPinAccess) assert.equal(inspectPinAccess(lastNativePin), mask);
+        const wrongAccess = required => e => {
+          assert.equal(e.code, "invalid-argument");
+          assert.deepEqual(e.details, { reason: "insufficient-pin-access", required, actual: access });
+          return true;
+        };
+        if (access !== "lifetime-owner") assert.throws(() => bindCurrentProcessLifetimeTo(pin), wrongAccess("lifetime-owner"));
+        if (access !== "job-member") assert.throws(() => job.assignProcess(pin), wrongAccess("job-member"));
+        assert.deepEqual(job.accounting(), { activeProcesses: 0, totalProcesses: 0, terminatedProcesses: 0 });
+        assert.equal(isCurrentProcessInJob(), beforeJob);
+        target.stdin.write("count\n"); assert.equal(Number((await input.next()).value), beforeCount, "rejected bind must not leave a remote handle");
+      } finally { pin.close(); }
+    }
+  } finally { job.close(); target.stdin.write("exit\n"); await exit; }
+
+  const restricted = spawn(fixture, ["no-duplicate-owner"], { stdio: ["pipe", "pipe", "inherit"] });
+  const restrictedExit = once(restricted, "exit");
+  const restrictedInput = createInterface({ input: restricted.stdout })[Symbol.asyncIterator]();
+  try {
+    assert.equal((await restrictedInput.next()).value, "ready");
+    const observer = PinnedProcess.open(restricted.pid);
+    try {
+      assert.equal(observer.access, "observe");
+      assert.equal(observer.identity.exited, false);
+      assert.ok(observer.imagePath.endsWith("proc-safe-job-fixture.exe"));
+      assert.throws(() => PinnedProcess.open(restricted.pid, { access: "lifetime-owner" }), e => e.code === "access-denied");
+      restricted.stdin.write("exit\n"); await restrictedExit;
+      assert.equal(observer.identity.exited, true);
+    } finally { observer.close(); }
+  } finally {
+    if (restricted.exitCode === null && restricted.signalCode === null) restricted.stdin.write("exit\n");
+    await restrictedExit;
+  }
 }
 
 async function environments() {
@@ -230,7 +290,7 @@ async function exitedOwners() {
     const exit = once(child, "exit");
     const input = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
     assert.equal((await input.next()).value, "ready");
-    const retained = PinnedProcess.open(child.pid);
+    const retained = PinnedProcess.open(child.pid, { access: "lifetime-owner" });
     try {
       assert.equal(retained.identity.exited, false);
       child.stdin.write("exit\n"); await exit;
@@ -346,8 +406,15 @@ if (isMainThread && process.argv[3] === "worker") {
   } else { parentPort.postMessage("passed"); }
 } else if (mode === "fault-proof") {
   assert.equal(typeof injectAssignmentFailure, "function");
+  await accessModes();
+  const worker = new Worker(new URL(import.meta.url), { argv: ["access-proof"] });
+  const exited = once(worker, "exit");
+  await once(worker, "message"); await exited;
   await faultProof(false); await faultProof(true);
-  console.log(JSON.stringify({ faultProof: 2 }));
+  console.log(JSON.stringify({ faultProof: 2, accessProof: 2 }));
+} else if (mode === "access-proof") {
+  await accessModes();
+  parentPort.postMessage("passed");
 } else {
   await operations();
   const worker = new Worker(new URL(import.meta.url), { argv: ["operations"] });

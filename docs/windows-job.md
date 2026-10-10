@@ -49,9 +49,10 @@ class WindowsJobChild implements Disposable {
   [Symbol.dispose](): void;
 }
 class PinnedProcess implements Disposable {
-  static open(pid: number, expect?: { imagePath?: string; startTimeMicros?: number }): PinnedProcess | null;
+  static open(pid: number, options?: { expect?: { imagePath?: string; startTimeMicros?: number }; access?: "observe" | "lifetime-owner" | "job-member" }): PinnedProcess | null;
   readonly identity: ProcessIdentity;
   readonly imagePath: string;
+  readonly access: "observe" | "lifetime-owner" | "job-member";
   close(): void;
   [Symbol.dispose](): void;
 }
@@ -64,9 +65,32 @@ function isSupported(): boolean;
 `ProcessIdentity` is the existing [identity type](identity.md). The pinned getter reads the
 retained kernel handle afresh, including `exited`; it never reopens a PID. Image and birth
 expectations must match exactly or throw `operation-failed`. Only a proven missing process
-returns null. Opening a pin acquires query, synchronization, duplicate, and job-assignment
-rights; denial throws even if a weaker observation might have succeeded. Image/ancestry
-selection and authorization policy remain in the caller.
+returns null. Expectations belong in `options.expect` (the former second positional
+expectation object is no longer supported). Image/ancestry selection and authorization
+policy remain in the caller.
+
+Choose `options.access` for the intended operation; it defaults to `"observe"` and is
+available as the readonly `access` property. Each pin requests exactly these process rights:
+
+| Access | Rights | Mask | Intended use |
+| --- | --- | --- | --- |
+| `"observe"` | QUERY_LIMITED_INFORMATION | `0x00001000` | Read identity, image path, and exit state |
+| `"lifetime-owner"` | QUERY_LIMITED_INFORMATION, DUP_HANDLE, SYNCHRONIZE | `0x00101040` | `bindCurrentProcessLifetimeTo(owner)` |
+| `"job-member"` | QUERY_LIMITED_INFORMATION, SET_QUOTA, TERMINATE | `0x00001101` | `job.assignProcess(target)` |
+
+All modes support observation. A denied open throws `access-denied`; it does not retry with
+different rights. Binding requires `"lifetime-owner"`, and assignment requires `"job-member"`.
+Using either operation with a different mode throws `invalid-argument` before any side effect,
+with `details: { reason: "insufficient-pin-access", required, actual }`. Pins never upgrade
+rights or reopen the PID. For example:
+
+```ts
+using target = PinnedProcess.open(pid, {
+  expect: { imagePath, startTimeMicros },
+  access: "job-member",
+});
+if (target) job.assignProcess(target);
+```
 
 `create` defaults to `killOnJobClose: true`. A duplicate name throws without changing the
 existing job. `open` returns null only for a proven missing name; denial throws. It owns a
@@ -119,6 +143,9 @@ Bun. Each exercises main-thread and Worker owners, output drainage, retained exi
 exit code 259, named jobs, cancellation, detached descendants, output EOF before extinction,
 nested jobs, Worker cleanup, process death, retained process lifetime, remote-handle rollback,
 and owner death during handoff. An independent Rust fixture supplies descendants and owners.
+Each thread also tests wrong-mode refusals and an observer of a process whose DACL denies
+DUP_HANDLE. The separate test addon queries the kernel's granted handle access using
+ObjectBasicInformation and verifies all three exact masks on the main thread and a Worker.
 
 The `fault-injection` Cargo feature is off by default. Windows CI builds its addon in a
 separate target directory and tests post-duplication rollback on Node and Bun, both on the
