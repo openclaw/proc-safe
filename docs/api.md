@@ -34,10 +34,13 @@ Windows. Compare boot-relative times when both identities provide them; use epoc
 times otherwise. `exited` describes a zombie or a retained Windows process object;
 it does not erase the object's birth identity. `null` means no kernel object exists.
 
-PIDs must be positive integers representable by the OS. `maxDepth` is a positive safe
-integer, defaults to 32, and counts self. `throughPid`, when supplied, must be a valid
+PIDs must be positive integers representable by the OS. Ancestry starts with `pid <= 1`
+throw `invalid-argument` with `details: { reason: "init-process" }` before any native read;
+`readProcessIdentity(1)` is unchanged. `maxDepth` is a positive safe
+integer and defaults to 32. `maxDepth` counts the starting process.
+`throughPid`, when supplied, must be a valid
 PID and stops the walk after including that process. The chain is self-first and
-never reads init/launchd as a parent. A parent born after its child is a reused PID
+never reads PID 0 or 1. A parent born after its child is a reused PID
 and is excluded. `complete` is true only for `root`, `missing-parent`, `recycled-parent`,
 or `through-pid`; `cycle`, `max-depth`, and `unreadable-parent` are incomplete.
 Only failure to identify the starting process throws; a proven missing start returns

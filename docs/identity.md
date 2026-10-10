@@ -5,7 +5,8 @@
 `readProcessAncestry(pid, { maxDepth?, throughPid? })` returns a frozen
 `{ chain, complete, stoppedBy }` snapshot, or `null` if the starting process is
 provably gone. `chain` contains the starting identity first. `maxDepth` defaults
-to 32 and counts self; `throughPid` stops after including that PID, including when
+to 32. `maxDepth` counts the starting process. `throughPid` stops after including
+that PID, including when
 it is the starting PID. The stop at `throughPid` takes precedence over the depth
 limit. A parent born after its child is excluded using boot-relative births where
 available, otherwise epoch births.
@@ -21,6 +22,9 @@ available, otherwise epoch births.
 | `unreadable-parent` | `false` | The parent identity is unknown, including denied access or visibility policy. |
 
 Invalid arguments and failure to identify the starting PID throw `ProcSafeError`.
+Starting with `pid <= 1` throws `invalid-argument` with
+`details: { reason: "init-process" }` before any native read; `readProcessIdentity(1)`
+is unchanged. Ancestry never reads PID 0 or 1.
 Once the starting identity is known, parent observation failures never throw:
 the partial chain remains useful for callers protecting observed ancestors.
 `complete` describes why this walk ended, not an atomic census or a claim that

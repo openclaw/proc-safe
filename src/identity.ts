@@ -39,6 +39,9 @@ export function readProcessIdentity(pid: number): ProcessIdentity | null {
 
 /** Self first; unknown parents end a partial chain, but an unknown starting identity throws. */
 export function readProcessAncestry(pid: number, options?: { maxDepth?: number; throughPid?: number }): ProcessAncestry | null {
+  if (pid <= 1) {
+    throw new ProcSafeError("invalid-argument", "ancestry requires a PID greater than 1", { details: { reason: "init-process" } });
+  }
   validatePid(pid);
   const maxDepth = options?.maxDepth ?? 32;
   if (!Number.isSafeInteger(maxDepth) || maxDepth < 1) {

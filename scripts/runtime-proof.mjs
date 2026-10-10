@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import { Worker } from "node:worker_threads";
+import { fileURLToPath } from "node:url";
 import { readProcessIdentity, readProcessAncestry, isSupported } from "../dist/identity.js";
 import * as darwin from "../dist/darwin.js";
 import { proveZombie } from "./zombie-proof.mjs";
@@ -13,6 +14,7 @@ import { proveLinuxEpoch } from "./linux-epoch-proof.mjs";
 import { proveRetainedExit } from "./windows-exit-proof.mjs";
 import { proveAncestry } from "./ancestry-proof.mjs";
 
+execFileSync(process.execPath, [fileURLToPath(new URL("./ancestry-init-proof.mjs", import.meta.url))], { encoding: "utf8" });
 assert.equal(isSupported(), true, "this runtime lane requires working native identity");
 const self = readProcessIdentity(process.pid);
 assert.equal(self.pid, process.pid);

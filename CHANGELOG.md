@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **Breaking:** `readProcessAncestry` now returns a self-first `{ chain, complete, stoppedBy }` snapshot or `null` for a provably gone start, instead of an array; unreadable parents preserve an incomplete chain, `throughPid` stops inclusively, and walks stop before reading parent PID 0 or 1.
+- **Breaking:** `readProcessAncestry` now returns a self-first `{ chain, complete, stoppedBy }` snapshot or `null` for a provably gone start, instead of an array; unreadable parents preserve an incomplete chain, `throughPid` stops inclusively, and starting PIDs ≤1 throw `invalid-argument` with `details.reason: "init-process"` before any native read (`readProcessIdentity(1)` is unchanged).
 
 ## 0.1.0 - 2026-10-10
 

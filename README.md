@@ -133,7 +133,8 @@ if (ancestry) {
 An unreadable parent preserves the partial chain with `complete: false` and
 `stoppedBy: "unreadable-parent"`. A root, missing or recycled parent ends a complete
 walk; a cycle or depth limit is incomplete. `throughPid` stops after including the
-requested ancestor and is complete. PID 0 and 1 are never read as parents.
+requested ancestor and is complete. Starting with PID ≤1 throws `invalid-argument`
+with `details.reason === "init-process"` before any native read; PID 0 and 1 are never read.
 Details and migration from the former array return: [identity and visibility](docs/identity.md).
 
 ## Command inspection and Windows census

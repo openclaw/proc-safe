@@ -15,6 +15,10 @@ describe("public contracts", () => {
   test.each([0, -1, 1.5, NaN, Infinity, 0x1_0000_0000])("rejects invalid throughPid %s", throughPid => {
     expect(() => readProcessAncestry(process.pid, { throughPid })).toThrow(expect.objectContaining({ code: "invalid-argument" }));
   });
+  test("ancestry rejects init-process PIDs before native loading on main and Worker", () => {
+    const output = execFileSync(process.execPath, ["scripts/ancestry-init-proof.mjs"], { encoding: "utf8" });
+    expect(output.trim()).toBe("init-process rejection precedes native loading on main and Worker");
+  });
   test("every subpath imports without loading a binding or spawning a process", () => {
     const output = execFileSync(process.execPath, ["--input-type=module", "-e", `
       process.dlopen = () => { throw new Error('addon was loaded during import'); };
