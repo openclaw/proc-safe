@@ -2,9 +2,16 @@ import { execFileSync } from "node:child_process";
 import { expect, test } from "vitest";
 import { becomeChildSubreaper, inspectChildWaitState, isChildSubreaper, reapChild } from "../src/reaper.js";
 
-test.each([0, -1, 1.5, NaN, Infinity, 0x80000000])("reaper rejects invalid PID %s", pid => {
+test.each([0, -1, 1.5, NaN, Infinity, 0x1_0000_0000])("reaper rejects invalid PID %s", pid => {
   for (const call of [inspectChildWaitState, reapChild]) {
     expect(() => call(pid)).toThrow(expect.objectContaining({ code: "invalid-argument" }));
+  }
+});
+
+test("reaper respects the host PID range before platform gating", () => {
+  const code = process.platform === "win32" ? "unsupported-platform" : "invalid-argument";
+  for (const call of [inspectChildWaitState, reapChild]) {
+    expect(() => call(0x80000000)).toThrow(expect.objectContaining({ code }));
   }
 });
 
