@@ -35,7 +35,7 @@ class SystemdBus implements AsyncDisposable {
   static connectPrivatePeer(address: string, options: SystemdCallOptions): Promise<AuthenticatedSystemdBus>;
   static connectBroker(address: string, options: SystemdCallOptions): Promise<SystemdBus>;
   static connectMachineBroker(machine: string, options: SystemdCallOptions): Promise<SystemdBus>;
-  getProperty(target: SystemdTarget, signature: SystemdSignature, options: SystemdCallOptions): Promise<SystemdValue>;
+  getProperty<Signature extends SystemdSignature>(target: SystemdTarget, signature: Signature, options: SystemdCallOptions): Promise<SystemdValueFor<Signature>>;
   call(target: SystemdTarget, args: readonly SystemdArg[], options: SystemdCallOptions): Promise<SystemdValue>;
   close(): Promise<void>;
   [Symbol.asyncDispose](): Promise<void>;
@@ -49,6 +49,16 @@ reports the direct owner's credentials without selecting an expected owner. Both
 accept one direct `unix:` address and read PID/EUID without credential augmentation
 before resolving. The immutable peer is an observation, not a process-lifetime pin.
 Use the existing `ProcessIdentity` from `./identity` for additional PID-reuse checks.
+
+An effective-UID mismatch rejects `connectUserManager` with `ProcSafeError`,
+`code: "access-denied"`, and exactly these details:
+`{ reason: "peer-uid-mismatch", expectedUid, actualUid }`. `expectedUid` is the
+caller's effective UID and `actualUid` is the kernel-authenticated peer's effective
+UID, both numbers. No connection is returned. `"peer-uid-mismatch"` is the only
+`details.reason` value defined by `./systemd`; other systemd errors omit `reason`.
+These values and fields are part of the public contract. Do not parse error messages
+or treat every `"access-denied"` as an ownership mismatch: transport permissions
+and remote D-Bus access refusals use the same error code without this reason.
 
 Broker factories deliberately expose no `peer` property. A machine route can use
 libsystemd's own `systemd-run`/`systemd-stdio-bridge` subprocesses to enter the
@@ -87,6 +97,16 @@ Properties return the value directly. Methods return an empty reply tuple or a
 one-element tuple containing their typed value, preserving the top-level D-Bus
 argument boundary. Method signatures are read from the reply; unsupported
 multi-argument reply bodies fail closed.
+
+The exported `SystemdValueFor<Signature extends SystemdSignature>` maps each
+literal signature to its decoded type: `s`/`o` to `string`, `u`/`i` to `number`,
+`t` to `bigint`, `b` to `boolean`, and each struct to the readonly tuple above.
+Prefixing any supported element signature with `a` gives a readonly array of that
+element type. A union of signatures produces a union of corresponding values.
+For example, `await bus.getProperty(target, 't', options)` is inferred as `bigint`,
+and `'a(sb)'` as `readonly (readonly [string, boolean])[]`. Wire validation and
+runtime values are unchanged. `call` retains `Promise<SystemdValue>` because
+its target and arguments do not declare the method's reply signature.
 
 All outgoing messages disable service auto-start, including `Properties.Get`.
 Named D-Bus failures throw `ProcSafeError` with `details.dbusErrorName`, allowing
@@ -136,3 +156,6 @@ CI proves import and typed unavailability without installing libsystemd.
 Main-thread, Worker, and their signal-volume regression proofs run as independent
 cases under the default per-test deadline. The flood count exceeds the measured
 undrained queue limit by one complete message batch.
+Cross-user proof connects as root to the runner user's real manager on both the
+main thread and a Worker, verifies the exact ownership-refusal details, and
+confirms that `connectPrivatePeer` still reports that different owner's UID.

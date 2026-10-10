@@ -46,3 +46,6 @@ Linux service-manager inspection is available through [`@openclaw/proc-safe/syst
 Connections own their native bus, serialize asynchronous calls, and apply a relative
 timeout to each operation, including queue time. Direct manager connections expose
 authenticated peer credentials; broker and machine routes make no peer identity claim.
+Property signatures infer their decoded value types, including `bigint` counters.
+User-manager ownership refusals expose the stable `peer-uid-mismatch` reason with
+the caller's and peer's effective UIDs in `ProcSafeError.details`.

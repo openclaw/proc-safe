@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Infer systemd property value types from their signatures, and distinguish user-manager ownership refusals with `peer-uid-mismatch` details containing the expected and actual effective UIDs.
+
 - Reap children killed by Linux real-time signals instead of leaving zombies, and expose `ChildExit.signalNumber` for all signal exits.
 
 - Add Linux subreaper admission, non-consuming child wait observations, and PID-specific reaping, plus bounded page-cache residency diagnostics and test-only Linux group-kill denial and Windows raw-spawn/console fixtures.

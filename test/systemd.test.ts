@@ -1,8 +1,23 @@
 import { execFileSync } from "node:child_process";
 import { describe, test, expect } from "vitest";
 import { SystemdBus, isSupported } from "../src/systemd.js";
+import { fromNativeError } from "../src/native-error.js";
+import { ProcSafeError } from "../src/errors.js";
 
 describe("systemd contracts", () => {
+  test("native ownership refusals retain the exact UID facts", () => {
+    const cause = new Error("access-denied: peer-uid-mismatch[0,1001]");
+    const error = fromNativeError(cause);
+    expect(error).toBeInstanceOf(ProcSafeError);
+    expect(error.code).toBe("access-denied");
+    expect(error.details).toEqual({ reason: "peer-uid-mismatch", expectedUid: 0, actualUid: 1001 });
+    expect(error.cause).toBe(cause);
+  });
+  test("other access refusals do not claim an ownership mismatch", () => {
+    expect(fromNativeError(new Error("access-denied: Permission denied")).details).toBeUndefined();
+    expect(fromNativeError(new Error("access-denied: dbus-error[org.freedesktop.DBus.Error.AccessDenied]")).details)
+      .toEqual({ dbusErrorName: "org.freedesktop.DBus.Error.AccessDenied" });
+  });
   test("invalid arguments are typed", async () => {
     for (const timeoutMs of [0, -1, NaN, Infinity]) {
       await expect(SystemdBus.connectBroker("unix:path=/missing", { timeoutMs })).rejects.toMatchObject({ code: "invalid-argument" });

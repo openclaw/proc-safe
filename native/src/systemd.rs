@@ -540,10 +540,11 @@ impl Owner {
             if pid <= 0 || uid == u32::MAX {
                 return Err(failure("layout-mismatch", "invalid peer credentials"));
             }
-            if mode == "user" && uid != unsafe { libc::geteuid() } {
+            let expected_uid = unsafe { libc::geteuid() };
+            if mode == "user" && uid != expected_uid {
                 return Err(failure(
                     "access-denied",
-                    "user manager peer has a different effective UID",
+                    format!("peer-uid-mismatch[{expected_uid},{uid}]"),
                 ));
             }
             Some((pid as u32, uid))

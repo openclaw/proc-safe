@@ -81,7 +81,9 @@ for Linux group-kill denial and raw Windows launches/console observation.
 The root and `./errors` export `ProcSafeError` and `ProcSafeErrorCode`. Errors accept
 `(code, message, { cause?, details? })`. Stable codes are `unsupported-platform`,
 `helper-unavailable`, `access-denied`, `layout-mismatch`, `timeout`, `incomplete`,
-`invalid-argument`, and `operation-failed`. `details` is optional diagnostic context.
+`invalid-argument`, and `operation-failed`. `details` is optional diagnostic context;
+capability-specific documented fields, including the [systemd ownership-refusal
+reason and UIDs](systemd.md#factories-and-identity), are stable public contracts.
 
 `@openclaw/proc-safe/inspect` exports the [command inspection API](inspect.md):
 

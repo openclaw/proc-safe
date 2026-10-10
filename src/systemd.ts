@@ -8,6 +8,22 @@ export type SystemdCallOptions = { readonly timeoutMs: number; readonly replyBud
 type ScalarSignature = "s" | "o" | "u" | "i" | "t" | "b";
 type StructSignature = "(sb)" | "(sus)" | "(sasbttttuii)";
 export type SystemdSignature = ScalarSignature | StructSignature | `a${ScalarSignature | StructSignature}`;
+type SignatureValues = {
+  s: string;
+  o: string;
+  u: number;
+  i: number;
+  t: bigint;
+  b: boolean;
+  "(sb)": readonly [string, boolean];
+  "(sus)": readonly [string, number, string];
+  "(sasbttttuii)": readonly [string, readonly string[], boolean, bigint, bigint, bigint, bigint, number, number, number];
+};
+/** The decoded property value for a supported D-Bus signature. */
+export type SystemdValueFor<Signature extends SystemdSignature> =
+  Signature extends keyof SignatureValues ? SignatureValues[Signature]
+    : Signature extends `a${infer ElementSignature extends keyof SignatureValues}` ? readonly SignatureValues[ElementSignature][]
+      : never;
 type Scalar = string | number | bigint | boolean;
 type Struct = readonly [string, boolean] | readonly [string, number, string]
   | readonly [string, readonly string[], boolean, bigint, bigint, bigint, bigint, number, number, number];
@@ -90,6 +106,7 @@ export class SystemdBus implements AsyncDisposable {
     return await this.#connect("private", address, value) as AuthenticatedSystemdBus;
   }
 
+  getProperty<Signature extends SystemdSignature>(at: SystemdTarget, signature: Signature, value: SystemdCallOptions): Promise<SystemdValueFor<Signature>>;
   async getProperty(at: SystemdTarget, signature: SystemdSignature, value: SystemdCallOptions): Promise<SystemdValue> {
     const budget = options(value); target(at);
     if (!signatures.has(signature)) invalid("unsupported property signature");

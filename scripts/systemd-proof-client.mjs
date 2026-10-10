@@ -30,7 +30,9 @@ export async function prove({ fixtureAddress, fixturePid, stalledAddress, manage
       { type: "s", value: "value" }, { type: "o", value: "/fixture" }, { type: "u", value: 4294967295 },
       { type: "i", value: -2147483648 }, { type: "t", value: 18446744073709551615n }, { type: "b", value: true },
     ], options), [true]);
-    await fails(() => bus.call(at("Deny"), [], options), "access-denied");
+    await assert.rejects(() => bus.call(at("Deny"), [], options), e => e instanceof ProcSafeError
+      && e.code === "access-denied" && e.details?.reason === undefined
+      && e.details?.dbusErrorName === "org.freedesktop.DBus.Error.AccessDenied"); passed++;
     await assert.rejects(() => bus.call(at("Missing"), [], options), e => e.details?.dbusErrorName === "org.freedesktop.systemd1.NoSuchUnit"); passed++;
     await fails(() => bus.getProperty(at("Text"), "u", options), "layout-mismatch");
     await fails(() => bus.call(at("Large"), [], { ...options, replyBudgetBytes: 32 }), "incomplete");
