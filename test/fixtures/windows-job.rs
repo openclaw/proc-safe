@@ -5,7 +5,7 @@ fn main() {}
 fn main() {
     use std::{
         io::{self, BufRead, Write},
-        process::{Command, Stdio},
+        process::Command,
         ptr::null,
         thread,
         time::Duration,
@@ -106,14 +106,44 @@ fn main() {
             std::process::exit(result.code().unwrap_or(1));
         }
         "tree" => {
-            let child = Command::new(std::env::current_exe().unwrap())
-                .args(["tick", &args[2]])
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn()
-                .unwrap();
-            println!("{}", child.id());
+            let executable = std::env::current_exe().unwrap();
+            let image: Vec<u16> = executable
+                .as_os_str()
+                .to_string_lossy()
+                .encode_utf16()
+                .chain(Some(0))
+                .collect();
+            let mut command: Vec<u16> =
+                format!("\"{}\" tick \"{}\"", executable.display(), args[2])
+                    .encode_utf16()
+                    .chain(Some(0))
+                    .collect();
+            let mut startup: STARTUPINFOW = unsafe { std::mem::zeroed() };
+            startup.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
+            let mut info: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
+            // No inherited handles: output closes independently of descendant extinction.
+            assert_ne!(
+                unsafe {
+                    CreateProcessW(
+                        image.as_ptr(),
+                        command.as_mut_ptr(),
+                        null(),
+                        null(),
+                        0,
+                        CREATE_NO_WINDOW,
+                        null(),
+                        null(),
+                        &startup,
+                        &mut info,
+                    )
+                },
+                0
+            );
+            println!("{}", info.dwProcessId);
+            unsafe {
+                CloseHandle(info.hThread);
+                CloseHandle(info.hProcess);
+            }
             io::stdout().flush().unwrap();
             std::process::exit(259);
         }
