@@ -1,0 +1,7 @@
+import { test } from "node:test";
+
+// Portable suite for hosts whose package manager or test-transformer has no native binary.
+// This imports the same real-kernel proof executed by the Vitest and Bun lanes.
+test("native identity, lifecycle, ancestry, coalition, and Worker boundaries", async () => {
+  await import("./runtime-proof.mjs");
+});

@@ -7,6 +7,8 @@ export type ProcessIdentity = {
   readonly parentPid: number;
   readonly startTimeMicros: number;
   readonly startTimeResolutionMicros: number;
+  readonly startTimeSinceBootMicros?: number;
+  readonly exited: boolean;
 };
 
 function platformSupported(): boolean {
@@ -14,7 +16,7 @@ function platformSupported(): boolean {
     && ["x64", "arm64"].includes(process.arch);
 }
 
-/** null means the process provably does not exist; uncertain observations throw. */
+/** null means no kernel object exists; retained exited objects still have an identity. */
 export function readProcessIdentity(pid: number): ProcessIdentity | null {
   validatePid(pid);
   if (!platformSupported()) throw new ProcSafeError("unsupported-platform", "process identity is unsupported on this platform");
@@ -40,7 +42,12 @@ export function readProcessAncestry(pid: number, options?: { maxDepth?: number }
     const current = readProcessIdentity(next);
     if (!current) break;
     const child = ancestry.at(-1);
-    if (child && current.startTimeMicros > child.startTimeMicros) break;
+    if (child) {
+      const sinceBoot = current.startTimeSinceBootMicros !== undefined && child.startTimeSinceBootMicros !== undefined;
+      const parentStart = sinceBoot ? current.startTimeSinceBootMicros! : current.startTimeMicros;
+      const childStart = sinceBoot ? child.startTimeSinceBootMicros! : child.startTimeMicros;
+      if (parentStart > childStart) break;
+    }
     ancestry.push(current);
     seen.add(next);
     if (next === 1 || current.parentPid === 0 || seen.has(current.parentPid)) break;

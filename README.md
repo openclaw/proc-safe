@@ -15,8 +15,12 @@ if (process.platform === 'darwin') {
 }
 ```
 
-Identity includes PID, parent PID, Unix-epoch `startTimeMicros`, and
-`startTimeResolutionMicros`. A missing process returns `null`; uncertain observations throw
+Identity includes PID, parent PID, Unix-epoch `startTimeMicros`,
+`startTimeResolutionMicros`, and `exited`. Linux and FreeBSD also provide
+`startTimeSinceBootMicros`; prefer it for PID-reuse comparisons because wall-clock
+changes cannot alter it. Darwin and Windows omit that field. An exited process whose
+kernel object remains still has an identity with `exited: true`. Only a missing kernel
+object returns `null`; uncertain observations throw
 `ProcSafeError`. Coalitions carry a bigint ID and an optional name from private libxpc symbols.
 Every subpath exports `isSupported()`, which never throws.
 
@@ -25,8 +29,7 @@ Set `PROC_SAFE_NATIVE=auto` (default), `off`, or `require`. These native-only AP
 `unsupported-platform`. `off` never attempts native loading.
 
 Ten platform packages are defined for Darwin arm64/x64, Linux GNU/musl arm64/x64,
-Windows arm64/x64, and FreeBSD arm64/x64. **FreeBSD identity is pending resolution of its
-boot-relative versus epoch-time contract and is not yet implemented.**
+Windows arm64/x64, and FreeBSD arm64/x64 (14.4 or newer).
 
 Read the [API](docs/api.md), [native architecture](docs/native.md),
 [contribution guide](CONTRIBUTING.md), and [security policy](SECURITY.md). MIT licensed.

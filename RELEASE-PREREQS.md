@@ -8,7 +8,7 @@ and each of the ten names in `scripts/native-targets.mjs`. Configure organizatio
 repository `proc-safe`, workflow `release.yml`, and no environment. Maintainers require 2FA.
 Initial package creation and publisher setup need a separate explicit authorization.
 
-Before release, resolve the FreeBSD identity contract and pass every native runtime gate.
+Before release, pass every native runtime gate, including FreeBSD 14.4 on x64 and ARM64.
 Update the root, private native workspace, crate, ten platform versions, and ten exact optional
 pins together. Regenerate lockfiles with `pnpm install` and `cargo update --workspace --offline`.
 Finalize a dated, nonempty changelog section and verify `pnpm release:notes X.Y.Z`.

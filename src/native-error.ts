@@ -10,5 +10,8 @@ export function fromNativeError(error: unknown): ProcSafeError {
   if (error instanceof ProcSafeError) return error;
   const message = error instanceof Error ? error.message : String(error);
   const code = message.slice(0, message.indexOf(":")) as ProcSafeErrorCode;
-  return new ProcSafeError(nativeCodes.has(code) ? code : "operation-failed", message, { cause: error });
+  return new ProcSafeError(nativeCodes.has(code) ? code : "operation-failed", message, { cause: error,
+    ...(code === "access-denied" && message === "access-denied: visibility-policy"
+      ? { details: { reason: "visibility-policy" } } : {}),
+  });
 }

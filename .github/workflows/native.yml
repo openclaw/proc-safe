@@ -53,6 +53,12 @@ jobs:
         env:
           PROC_SAFE_NATIVE: require
         run: pnpm test:bun
+      - name: Real Darwin permission denial
+        if: runner.os == 'macOS'
+        run: node scripts/check-darwin-denial.mjs
+      - name: Real restricted procfs namespace
+        if: runner.os == 'Linux'
+        run: node scripts/check-restricted-visibility.mjs
       - run: pnpm package:smoke
       - run: pnpm benchmark:imports
       - run: bun scripts/benchmark-imports.mjs
@@ -127,23 +133,29 @@ jobs:
             arch: aarch64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - name: Real FreeBSD 14.3 VM
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Prepare dependencies and JavaScript on the Linux host
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          pnpm test
+      - name: Real FreeBSD 14.4 kernel (ARM64 CPU emulated by QEMU)
         uses: vmactions/freebsd-vm@c46abacb49f09938ca4e1702d15d836285d694cc
         with:
-          release: '14.3'
+          release: '14.4'
           arch: ${{ matrix.arch }}
           usesh: true
           prepare: pkg install -y node${{ matrix.node }} npm-node${{ matrix.node }} rust gmake
           run: |
             set -eu
-            npm install --global pnpm@12.10.1
             node -e "if(process.platform !== 'freebsd' || process.arch !== '${{ matrix.cpu }}') throw new Error('wrong runtime')"
-            pnpm install --frozen-lockfile
-            pnpm build
-            pnpm native:build
-            PROC_SAFE_NATIVE=require pnpm test
-            pnpm package:smoke
-            pnpm benchmark:imports
+            node scripts/build-native.mjs
+            PROC_SAFE_NATIVE=require node --test scripts/native-runtime.test.mjs
+            node scripts/check-release-packages.mjs --allow-host-only --npm-only
+            node scripts/check-restricted-visibility.mjs
+            node scripts/benchmark-imports.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: matrix.node == 24
         with:

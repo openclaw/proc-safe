@@ -2,5 +2,6 @@
 
 ## Unreleased
 
-- Add lazy native process identity and ancestry observations for Darwin, Linux, and Windows, plus Darwin resource-coalition IDs and optional names.
-- Define ten platform packages and native runtime gates; FreeBSD identity remains pending its time-domain contract.
+- Add lazy native process identity and ancestry observations for Darwin, Linux, Windows, and FreeBSD, plus Darwin resource-coalition IDs and optional names.
+- Report retained exited process objects and boot-relative birth times on Linux/FreeBSD for clock-change-safe identity comparisons.
+- Define ten platform packages with native runtime and isolated consumer-install checks.

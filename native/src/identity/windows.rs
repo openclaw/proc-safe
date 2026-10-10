@@ -8,8 +8,11 @@ use std::{
 use windows_sys::Win32::{
     Foundation::{
         CloseHandle, ERROR_ACCESS_DENIED, ERROR_INVALID_PARAMETER, FILETIME, GetLastError, HANDLE,
+        STILL_ACTIVE,
     },
-    System::Threading::{GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
+    System::Threading::{
+        GetExitCodeProcess, GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    },
 };
 
 #[repr(C)]
@@ -106,5 +109,19 @@ pub fn read(pid: u32) -> Result<Option<ProcessIdentity>> {
     let micros = (ticks / 10)
         .checked_sub(11_644_473_600_000_000)
         .ok_or_else(|| failure("layout-mismatch", "invalid process FILETIME"))?;
-    identity(pid, basic.parent_pid as u32, micros, 1.0).map(Some)
+    let mut exit_code = 0;
+    if unsafe { GetExitCodeProcess(handle.0, &mut exit_code) } == 0 {
+        return Err(error("GetExitCodeProcess"));
+    }
+    let mut has_exited = exit_code != STILL_ACTIVE as u32;
+    if !has_exited {
+        // An application can itself return 259. The kernel exit timestamp is unambiguous.
+        if unsafe { GetProcessTimes(handle.0, &mut created, &mut exited, &mut kernel, &mut user) }
+            == 0
+        {
+            return Err(error("GetProcessTimes"));
+        }
+        has_exited = exited.dwHighDateTime != 0 || exited.dwLowDateTime != 0;
+    }
+    identity(pid, basic.parent_pid as u32, micros, 1.0, None, has_exited).map(Some)
 }

@@ -8,24 +8,37 @@ Linux libc detection uses the process report, executable ELF interpreter, then c
 musl library names. Unknown libc attempts the GNU binding and fails explicitly if incompatible.
 
 Darwin reads public proc_bsdinfo through libc's C layout on both arm64 and x64 and validates
-size, PID and timeval fields. Coalitions use PROC_PIDCOALITIONINFO with exact returned-size
+size, PID and timeval fields. Its ESRCH path checks `kern.proc.pid` using the SDK
+layout because libproc excludes zombies. This second observation distinguishes
+a retained zombie from a missing object. Coalitions use PROC_PIDCOALITIONINFO with exact returned-size
 checking. Private XPC symbols are resolved only while reading the optional name; all required
 symbols, dictionary type, and matching coalition ID are checked before consuming it.
 
 Windows retains a process handle through GetProcessTimes and the parent observation. FILETIME
 is divided as a 64-bit integer before conversion to a JavaScript number. Handles close even
-when the second observation fails. Access denial is never reported as a missing process.
+when an observation fails. GetExitCodeProcess reports retained exited objects; an exit timestamp disambiguates
+the reserved STILL_ACTIVE value from an application that actually exits with code 259. Access denial is never reported as a missing process.
 
 Linux reads procfs stat using the final comm parenthesis and brackets it with btime reads.
 The kernel clock-tick frequency supplies the birth resolution. btime itself is rounded to
 seconds: absolute epoch time can differ by up to one second, even though relative birth
-resolution is one tick. A clock change during the bracket rejects the observation. A concealed
+resolution is one tick. `startTimeSinceBootMicros` comes directly from start ticks
+and is preferred for PID-reuse comparisons. Zombie/dead states set `exited`. A clock change during the bracket rejects the observation. A concealed
 procfs entry is not absence unless kill(pid, 0) proves ESRCH.
 
-FreeBSD identity is deliberately absent pending a contract decision: the existing consumer
-uses a boot-time-bracketed, boot-relative identity to remain stable across wall-clock changes.
-An epoch-only API cannot preserve that property. Target packages and VM gates exist; an
-unimplemented binding never advertises this capability.
+FreeBSD reads `kern.proc.pid` using libc's kinfo_proc layout, requiring 1088 bytes,
+layout version zero, and the requested PID. Exact boot timevals bracket the query;
+a changed bracket fails closed. `startTimeMicros` is the kernel epoch start time;
+`startTimeSinceBootMicros` subtracts that same bracketed boot timeval. `ki_stat`
+identifies zombies. Visibility denial can also return ESRCH. A cached policy snapshot determines whether
+that means absence or `access-denied` with a `visibility-policy` reason. Policy
+read failures are restricted. See [identity and visibility](identity.md).
+
+FreeBSD CI uses 14.4. Dependencies and TypeScript output are prepared on Linux and
+synced into the VM; Cargo builds the addon under the FreeBSD kernel. The portable
+native suite runs directly with Node, including the unreaped-zombie test and real
+Workers, followed by a root-only npm consumer install. ARM64 CPU execution uses
+QEMU emulation with a real FreeBSD kernel. No pnpm binary runs inside either VM.
 
 Run `PROC_SAFE_NATIVE=require pnpm test` and `node scripts/runtime-proof.mjs` after building.
 Both the main thread and a real Worker query native identities. Packed npm and pnpm root-only

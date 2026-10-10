@@ -7,11 +7,22 @@ import { once } from "node:events";
 import { Worker } from "node:worker_threads";
 import { readProcessIdentity, readProcessAncestry, isSupported } from "../dist/identity.js";
 import * as darwin from "../dist/darwin.js";
+import { proveZombie } from "./zombie-proof.mjs";
+import { readAfterClose } from "./identity-proof-assertions.mjs";
+import { provePermissionDenied } from "./permission-denial-proof.mjs";
+import { proveRetainedExit } from "./windows-exit-proof.mjs";
 
 assert.equal(isSupported(), true, "this runtime lane requires working native identity");
 const self = readProcessIdentity(process.pid);
 assert.equal(self.pid, process.pid);
 assert.equal(self.parentPid, process.ppid);
+assert.equal(self.exited, false);
+if (["linux", "freebsd"].includes(process.platform)) {
+  assert.ok(Number.isSafeInteger(self.startTimeSinceBootMicros));
+  assert.ok(self.startTimeSinceBootMicros >= 0);
+} else {
+  assert.equal(Object.hasOwn(self, "startTimeSinceBootMicros"), false);
+}
 assert.ok(Number.isSafeInteger(self.startTimeMicros));
 assert.ok(self.startTimeMicros > Date.UTC(2020, 0, 1) * 1000);
 assert.ok(self.startTimeMicros <= Date.now() * 1000);
@@ -20,11 +31,14 @@ assert.deepEqual(readProcessIdentity(process.pid), self);
 assert.equal(readProcessAncestry(process.pid, { maxDepth: 1 }).length, 1);
 
 const earliest = Date.now() * 1000;
+let childIdentity;
 const child = spawn(process.execPath, ["-e", "process.title = 'proc) test (name'; console.log('ready'); setInterval(() => {}, 1000)"], { stdio: ["ignore", "pipe", "inherit"] });
 try {
   await once(child.stdout, "data");
   const latest = Date.now() * 1000;
   const identity = readProcessIdentity(child.pid);
+  childIdentity = identity;
+  assert.equal(identity.exited, false);
   assert.equal(identity.pid, child.pid);
   assert.equal(identity.parentPid, process.pid);
   // Linux btime is an integer second; it carries that documented epoch offset uncertainty.
@@ -61,8 +75,15 @@ if (process.platform === "linux") {
     rmSync(dir, { recursive: true, force: true });
   }
 }
-assert.equal(readProcessIdentity(child.pid), null);
-assert.deepEqual(readProcessAncestry(child.pid), []);
+const remaining = readAfterClose(child.pid, childIdentity);
+if (remaining.restricted) {
+  assert.throws(() => readProcessAncestry(child.pid, { maxDepth: 1 }), error =>
+    error.code === "access-denied" && error.details?.reason === "visibility-policy");
+} else {
+  assert.deepEqual(readProcessAncestry(child.pid, { maxDepth: 1 }), remaining.result ? [remaining.result] : []);
+}
+if (process.platform !== "win32") await proveZombie();
+else { await proveRetainedExit(); await provePermissionDenied(4); }
 
 const worker = new Worker(new URL("./worker-proof.mjs", import.meta.url));
 const workerExit = once(worker, "exit");
@@ -78,4 +99,4 @@ if (process.platform === "darwin") {
   assert.throws(() => darwin.readProcessCoalition(process.pid), e => e.code === "unsupported-platform");
 }
 assert.deepEqual(await workerExit, [0]);
-console.log(JSON.stringify({ platform: process.platform, arch: process.arch, runtime: process.versions.bun ? "bun" : "node", passed: 6 }));
+console.log(JSON.stringify({ platform: process.platform, arch: process.arch, runtime: process.versions.bun ? "bun" : "node", passed: 7 }));

@@ -21,4 +21,5 @@ libc = "0.2.190"
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_Threading"] }
 
 [build-dependencies]
+cc = "1.7.0"
 napi-build = "2.6.0"

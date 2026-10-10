@@ -19,6 +19,7 @@ assert.ok(host, "host must be a supported release target");
 const targets = process.argv.includes("--allow-host-only") ? [host] : nativeTargets;
 const manifest = [];
 const artifacts = [];
+const managers = process.argv.includes("--npm-only") ? ["npm"] : ["npm", "pnpm"];
 function pack(directory) {
   const pkg = JSON.parse(readFileSync(new URL("package.json", directory), "utf8"));
   const result = JSON.parse(execFileSync(process.execPath, [npm, "pack", "--ignore-scripts", "--json", "--pack-destination", output], { cwd: directory, encoding: "utf8" }));
@@ -43,7 +44,7 @@ try {
   for (const key of ["NODE_PATH", "NODE_OPTIONS", "NPM_TOKEN", "NODE_AUTH_TOKEN", "npm_config__authToken"]) delete env[key];
   writeFileSync(env.npm_config_userconfig, "");
   writeFileSync(env.npm_config_globalconfig, "");
-  for (const manager of ["npm", "pnpm"]) {
+  for (const manager of managers) {
     const cwd = join(temp, manager);
     mkdirSync(cwd);
     writeFileSync(join(cwd, "package.json"), JSON.stringify({ private: true, type: "module" }));
@@ -79,7 +80,7 @@ try {
     await run(process.execPath, ["proof.mjs"], { cwd, env: { ...env, PROC_SAFE_NATIVE: "require" }, timeout: 30_000 });
     console.log(`${manager} root-only install: native main + Worker + platform filtering passed`);
   }
-  writeFileSync(join(output, "consumer-proof.json"), JSON.stringify({ platform: process.platform, arch: process.arch, target: host.label, packages: manifest, managers: ["npm", "pnpm"], passed: true }, null, 2) + "\n");
+  writeFileSync(join(output, "consumer-proof.json"), JSON.stringify({ platform: process.platform, arch: process.arch, target: host.label, packages: manifest, managers, passed: true }, null, 2) + "\n");
 } finally {
   await registry.close();
   rmSync(temp, { recursive: true, force: true });
