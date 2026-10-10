@@ -55,9 +55,14 @@ async function detached() {
   const output = join(directory, "receipt.json");
   const args = ["", "two words", 'a"quote', "tail\\", 'two\\\\"quotes', "café"];
   writeFileSync(script, `import { writeFileSync } from 'node:fs';
+    import { tmpdir } from 'node:os';
     import { hasConsoleWindow } from ${JSON.stringify(new URL("../dist/test-support.js", import.meta.url).href)};
+    const cwd = process.cwd();
+    // Release the directory handle before publishing the receipt: Windows may
+    // expose exit metadata before all process-owned handles finish closing.
+    process.chdir(tmpdir());
     writeFileSync(process.argv[2], JSON.stringify({ pid: process.pid, args: process.argv.slice(3),
-      cwd: process.cwd(), console: hasConsoleWindow() }));`);
+      cwd, console: hasConsoleWindow() }));`);
   let pid;
   try {
     const child = fixtures.spawnDetachedRaw({ executable: process.execPath, args: [script, output, ...args], cwd: directory });
