@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Stabilize Linux epoch birth estimates with realtime/boottime samples, removing the extra second of `btime` truncation while preserving exact tick-quantized process identity.
+
 - Infer systemd property value types from their signatures, and distinguish user-manager ownership refusals with `peer-uid-mismatch` details containing the expected and actual effective UIDs.
 
 - Reap children killed by Linux real-time signals instead of leaving zombies, and expose `ChildExit.signalNumber` for all signal exits.

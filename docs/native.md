@@ -23,11 +23,15 @@ is divided as a 64-bit integer before conversion to a JavaScript number. Handles
 when an observation fails. GetExitCodeProcess reports retained exited objects; an exit timestamp disambiguates
 the reserved STILL_ACTIVE value from an application that actually exits with code 259. Access denial is never reported as a missing process.
 
-Linux reads procfs stat using the final comm parenthesis and brackets it with btime reads.
-The kernel clock-tick frequency supplies the birth resolution. btime itself is rounded to
-seconds: absolute epoch time can differ by up to one second, even though relative birth
-resolution is one tick. `startTimeSinceBootMicros` comes directly from start ticks
-and is preferred for PID-reuse comparisons. Zombie/dead states set `exited`. A clock change during the bracket rejects the observation. A concealed
+Linux reads procfs stat using the final comm parenthesis and brackets it with samples of
+`CLOCK_REALTIME` and `CLOCK_BOOTTIME`. Intersecting the samples' offset intervals detects
+observed wall-clock changes and bounds sampling uncertainty to one clock tick; a disjoint
+or wider interval throws `incomplete`. The lower offset bound plus the tick-quantized birth
+estimates epoch time with less than two ticks plus one microsecond of uncertainty relative
+to the current wall clock. `/proc/stat`'s integer-second `btime` is not used: its truncation
+adds to start-tick truncation and can exceed a whole second. `startTimeSinceBootMicros`
+comes directly from start ticks and is preferred for PID-reuse comparisons. Both birth and
+`CLOCK_BOOTTIME` include suspend time. Zombie/dead states set `exited`. A concealed
 procfs entry is not absence unless kill(pid, 0) proves ESRCH.
 
 FreeBSD reads `kern.proc.pid` using libc's kinfo_proc layout, requiring 1088 bytes,

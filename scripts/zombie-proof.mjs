@@ -7,7 +7,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import { createInterface } from "node:readline";
 import { Worker } from "node:worker_threads";
-import { readAfterClose } from "./identity-proof-assertions.mjs";
+import { assertSameIdentity, readAfterClose } from "./identity-proof-assertions.mjs";
 import { readProcessIdentity } from "../dist/identity.js";
 
 export async function proveZombie() {
@@ -30,12 +30,12 @@ export async function proveZombie() {
     const zombie = readProcessIdentity(pid);
     assert.equal(zombie.exited, true);
     assert.equal(zombie.pid, alive.pid);
-    assert.equal(zombie.startTimeMicros, alive.startTimeMicros);
+    assertSameIdentity({ ...zombie, exited: false }, alive);
     assert.equal(zombie.startTimeSinceBootMicros, alive.startTimeSinceBootMicros);
     const worker = new Worker(new URL("./worker-proof.mjs", import.meta.url), { workerData: { pid } });
     const workerExit = once(worker, "exit");
     const [observation] = await once(worker, "message");
-    assert.deepEqual(observation.identity, zombie);
+    assertSameIdentity(observation.identity, zombie);
     assert.deepEqual(await workerExit, [0]);
     helper.stdin.end("r");
     assert.deepEqual(await closed, [0, null]);

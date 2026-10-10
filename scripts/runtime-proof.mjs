@@ -8,7 +8,8 @@ import { Worker } from "node:worker_threads";
 import { readProcessIdentity, readProcessAncestry, isSupported } from "../dist/identity.js";
 import * as darwin from "../dist/darwin.js";
 import { proveZombie } from "./zombie-proof.mjs";
-import { readAfterClose } from "./identity-proof-assertions.mjs";
+import { assertSameIdentity, readAfterClose } from "./identity-proof-assertions.mjs";
+import { proveLinuxEpoch } from "./linux-epoch-proof.mjs";
 import { proveRetainedExit } from "./windows-exit-proof.mjs";
 
 assert.equal(isSupported(), true, "this runtime lane requires working native identity");
@@ -26,7 +27,7 @@ assert.ok(Number.isSafeInteger(self.startTimeMicros));
 assert.ok(self.startTimeMicros > Date.UTC(2020, 0, 1) * 1000);
 assert.ok(self.startTimeMicros <= Date.now() * 1000);
 assert.ok(self.startTimeResolutionMicros > 0);
-assert.deepEqual(readProcessIdentity(process.pid), self);
+assertSameIdentity(readProcessIdentity(process.pid), self);
 assert.equal(readProcessAncestry(process.pid, { maxDepth: 1 }).length, 1);
 
 const earliest = Date.now() * 1000;
@@ -40,8 +41,8 @@ try {
   assert.equal(identity.exited, false);
   assert.equal(identity.pid, child.pid);
   assert.equal(identity.parentPid, process.pid);
-  // Linux btime is an integer second; it carries that documented epoch offset uncertainty.
-  const epochTolerance = process.platform === "linux" ? 1_000_000 : 1000;
+  // Linux: one birth tick + one bounded clock-sampling tick; Date.now loses 1 ms.
+  const epochTolerance = process.platform === "linux" ? 2 * identity.startTimeResolutionMicros + 1000 : 1000;
   assert.ok(identity.startTimeMicros >= earliest - epochTolerance);
   assert.ok(identity.startTimeMicros <= latest + epochTolerance);
   const ancestry = readProcessAncestry(child.pid, { maxDepth: 2 });
@@ -87,7 +88,7 @@ else await proveRetainedExit();
 const worker = new Worker(new URL("./worker-proof.mjs", import.meta.url));
 const workerExit = once(worker, "exit");
 const [result] = await once(worker, "message");
-assert.deepEqual(result.identity, self);
+assertSameIdentity(result.identity, self);
 if (process.platform === "darwin") {
   const coalition = darwin.readProcessCoalition(process.pid);
   assert.ok(coalition === null || typeof coalition.id === "bigint" && coalition.id > 0n);
@@ -98,4 +99,19 @@ if (process.platform === "darwin") {
   assert.throws(() => darwin.readProcessCoalition(process.pid), e => e.code === "unsupported-platform");
 }
 assert.deepEqual(await workerExit, [0]);
+if (process.platform === "linux") {
+  const directory = mkdtempSync(join(tmpdir(), "proc-safe-epoch-"));
+  try {
+    const executable = join(directory, "clock-probe");
+    execFileSync("cc", [new URL("../test/fixtures/linux-epoch.c", import.meta.url).pathname, "-o", executable]);
+    await proveLinuxEpoch(executable);
+    const epochWorker = new Worker(new URL("./worker-proof.mjs", import.meta.url), { workerData: { epochExecutable: executable } });
+    const exited = once(epochWorker, "exit");
+    const [proof] = await once(epochWorker, "message");
+    assert.equal(proof.epochSamples, 32);
+    assert.deepEqual(await exited, [0]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
 console.log(JSON.stringify({ platform: process.platform, arch: process.arch, runtime: process.versions.bun ? "bun" : "node", passed: 7 }));

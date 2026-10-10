@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { readProcessIdentity } from "../dist/identity.js";
 
+export function assertSameIdentity(actual, expected) {
+  if (process.platform !== "linux") return assert.deepEqual(actual, expected);
+  const { startTimeMicros: actualEpoch, ...actualStable } = actual;
+  const { startTimeMicros: expectedEpoch, ...expectedStable } = expected;
+  assert.deepEqual(actualStable, expectedStable);
+  // Epoch is sampled at read time; the boot-relative birth remains exact.
+  assert.ok(Math.abs(actualEpoch - expectedEpoch) <= 2 * actual.startTimeResolutionMicros + 1);
+}
+
 export function readAfterClose(pid, before) {
   let result;
   try { result = readProcessIdentity(pid); }
@@ -13,7 +22,7 @@ export function readAfterClose(pid, before) {
   if (result !== null) {
     assert.equal(result.exited, true);
     assert.equal(result.pid, before.pid);
-    assert.equal(result.startTimeMicros, before.startTimeMicros);
+    if (process.platform !== "linux") assert.equal(result.startTimeMicros, before.startTimeMicros);
     assert.equal(result.startTimeSinceBootMicros, before.startTimeSinceBootMicros);
   }
   return { result };

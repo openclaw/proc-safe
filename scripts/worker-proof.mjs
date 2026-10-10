@@ -1,7 +1,9 @@
 import { parentPort, workerData } from "node:worker_threads";
 import { readProcessIdentity, readProcessAncestry } from "../dist/identity.js";
 import * as darwin from "../dist/darwin.js";
+import { proveLinuxEpoch } from "./linux-epoch-proof.mjs";
 const pid = workerData?.pid ?? process.pid;
 const identity = readProcessIdentity(pid);
 if (readProcessAncestry(pid, { maxDepth: 1 })[0]?.pid !== pid) throw new Error("Worker ancestry failed");
-parentPort.postMessage({ identity, coalition: process.platform === "darwin" ? darwin.readProcessCoalition(process.pid) : undefined });
+const epochSamples = workerData?.epochExecutable ? (await proveLinuxEpoch(workerData.epochExecutable)).length : undefined;
+parentPort.postMessage({ identity, epochSamples, coalition: process.platform === "darwin" ? darwin.readProcessCoalition(process.pid) : undefined });

@@ -51,17 +51,62 @@ fn visibility_permissive() -> bool {
     })
 }
 
-fn boot_time() -> Result<u64> {
-    let stat = fs::read_to_string("/proc/stat").map_err(io)?;
-    stat.lines()
-        .find_map(|l| l.strip_prefix("btime "))
-        .and_then(|v| v.parse().ok())
-        .ok_or_else(|| failure("layout-mismatch", "missing or invalid procfs boot time"))
+fn clock_nanos(clock: libc::clockid_t) -> Result<i128> {
+    let mut time = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    if unsafe { libc::clock_gettime(clock, &mut time) } != 0 {
+        return Err(io(std::io::Error::last_os_error()));
+    }
+    if time.tv_sec < 0 || !(0..1_000_000_000).contains(&time.tv_nsec) {
+        return Err(failure("layout-mismatch", "invalid process clock value"));
+    }
+    Ok(i128::from(time.tv_sec) * 1_000_000_000 + i128::from(time.tv_nsec))
+}
+
+fn boot_epoch_bounds() -> Result<(i128, i128)> {
+    let before = clock_nanos(libc::CLOCK_BOOTTIME)?;
+    let realtime = clock_nanos(libc::CLOCK_REALTIME)?;
+    let after = clock_nanos(libc::CLOCK_BOOTTIME)?;
+    clock_sample_bounds(before, realtime, after)
+}
+
+fn clock_sample_bounds(before: i128, realtime: i128, after: i128) -> Result<(i128, i128)> {
+    if after < before {
+        return Err(failure(
+            "incomplete",
+            "boot clock changed during process observation",
+        ));
+    }
+    // Measure the uncertainty with the non-jumping clock. Realtime endpoints
+    // could hide a long deschedule if a backward wall-clock step cancels it.
+    Ok((realtime - after, realtime - before))
+}
+
+fn boot_epoch_lower(before: (i128, i128), after: (i128, i128), hz: i128) -> Result<i128> {
+    // Check each bracket, not just their intersection: a wide final bracket
+    // could otherwise hide a wall-clock step by containing the earlier one.
+    let tick = 1_000_000_000 / hz;
+    if before.1 - before.0 > tick || after.1 - after.0 > tick {
+        return Err(failure(
+            "incomplete",
+            "process clock sampling exceeded one tick",
+        ));
+    }
+    let lower = before.0.max(after.0);
+    if lower > before.1.min(after.1) {
+        return Err(failure(
+            "incomplete",
+            "boot time changed during process observation",
+        ));
+    }
+    Ok(lower)
 }
 
 pub fn read(pid: u32) -> Result<Option<ProcessIdentity>> {
     let permissive = visibility_permissive();
-    let before = boot_time()?;
+    let before = boot_epoch_bounds()?;
     let stat = match fs::read(format!("/proc/{pid}/stat")) {
         Ok(stat) => stat,
         Err(error) if error.raw_os_error() == Some(libc::ESRCH) => return Ok(None),
@@ -84,12 +129,7 @@ pub fn read(pid: u32) -> Result<Option<ProcessIdentity>> {
         }
         Err(error) => return Err(io(error)),
     };
-    if before != boot_time()? {
-        return Err(failure(
-            "incomplete",
-            "boot time changed during process observation",
-        ));
-    }
+    let after = boot_epoch_bounds()?;
     let prefix = format!("{pid} (");
     let end = stat
         .iter()
@@ -117,7 +157,9 @@ pub fn read(pid: u32) -> Result<Option<ProcessIdentity>> {
         ));
     }
     let since_boot = u128::from(ticks) * 1_000_000 / hz as u128;
-    let micros = u128::from(before) * 1_000_000 + since_boot;
+    let lower = boot_epoch_lower(before, after, i128::from(hz))?;
+    // /proc btime truncates a whole second in addition to the birth tick.
+    let micros = lower.div_euclid(1000) + since_boot as i128;
     let micros = u64::try_from(micros)
         .map_err(|_| failure("layout-mismatch", "process start time overflow"))?;
     let since_boot = u64::try_from(since_boot).map_err(|_| {
@@ -139,4 +181,33 @@ pub fn read(pid: u32) -> Result<Option<ProcessIdentity>> {
         matches!(*state, "Z" | "X" | "x"),
     )
     .map(Some)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{boot_epoch_lower, clock_sample_bounds};
+
+    #[test]
+    fn intersects_tight_clock_brackets() {
+        assert_eq!(boot_epoch_lower((100, 200), (150, 250), 100).unwrap(), 150);
+        assert!(boot_epoch_lower((100, 200), (201, 300), 100).is_err());
+    }
+
+    #[test]
+    fn rejects_a_clock_step_hidden_by_the_intersection() {
+        let tight = (100, 200);
+        let stepped = (100, 1_000_000_100);
+        assert!(boot_epoch_lower(tight, stepped, 100).is_err());
+        assert!(boot_epoch_lower(stepped, tight, 100).is_err());
+    }
+
+    #[test]
+    fn rejects_a_backward_step_cancelling_elapsed_realtime() {
+        let first = clock_sample_bounds(0, 1_000_000_100, 200).unwrap();
+        // A 1 s pause with a 1 s backward realtime step must still measure
+        // as a wide sample, even though realtime barely advanced.
+        let paused = clock_sample_bounds(300, 1_000_000_101, 1_000_000_300).unwrap();
+        assert!(boot_epoch_lower(first, paused, 100).is_err());
+        assert!(clock_sample_bounds(200, 1_000_000_100, 100).is_err());
+    }
 }

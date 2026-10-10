@@ -5,8 +5,10 @@ import { getNativeBinding, validatePid } from "./native.js";
 export type ProcessIdentity = {
   readonly pid: number;
   readonly parentPid: number;
+  /** Epoch microseconds. Linux estimates against the current wall clock; see docs/identity.md. */
   readonly startTimeMicros: number;
   readonly startTimeResolutionMicros: number;
+  /** Stable, tick-quantized birth on Linux; prefer this field for PID-reuse comparisons. */
   readonly startTimeSinceBootMicros?: number;
   readonly exited: boolean;
 };
