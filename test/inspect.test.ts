@@ -20,5 +20,13 @@ test.each([0, -1, NaN, Infinity])("census rejects invalid timeout %s", timeoutMs
 });
 
 test("census is Windows-only", () => {
-  if (process.platform !== "win32") expect(() => listProcesses({ timeoutMs: 1000 })).toThrow(expect.objectContaining({ code: "unsupported-platform" }));
+  if (process.platform === "win32") {
+    if (process.env.PROC_SAFE_NATIVE === "require") {
+      expect(listProcesses({ timeoutMs: 1000 }).some(row => row.pid === process.pid)).toBe(true);
+    } else {
+      expect(typeof listProcesses).toBe("function");
+    }
+  } else {
+    expect(() => listProcesses({ timeoutMs: 1000 })).toThrow(expect.objectContaining({ code: "unsupported-platform" }));
+  }
 });
