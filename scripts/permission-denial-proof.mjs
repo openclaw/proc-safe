@@ -4,10 +4,14 @@ import { fileURLToPath } from "node:url";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
 import { ProcSafeError } from "../dist/errors.js";
 import { readProcessIdentity } from "../dist/identity.js";
+import { readProcessCommand } from "../dist/inspect.js";
 
 function assertDenied(pid) {
   assert.ok(Number.isInteger(pid) && pid > 0);
   assert.throws(() => readProcessIdentity(pid), error => error instanceof ProcSafeError && error.code === "access-denied");
+  if (process.platform === "win32") {
+    assert.throws(() => readProcessCommand(pid), error => error instanceof ProcSafeError && error.code === "access-denied");
+  }
 }
 
 export async function provePermissionDenied(pid) {

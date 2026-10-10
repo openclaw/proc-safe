@@ -43,6 +43,10 @@
       "types": "./dist/systemd.d.ts",
       "default": "./dist/systemd.js"
     },
+    "./inspect": {
+      "types": "./dist/inspect.d.ts",
+      "default": "./dist/inspect.js"
+    },
     "./errors": {
       "types": "./dist/errors.d.ts",
       "default": "./dist/errors.js"

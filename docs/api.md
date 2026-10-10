@@ -82,3 +82,17 @@ The root and `./errors` export `ProcSafeError` and `ProcSafeErrorCode`. Errors a
 `(code, message, { cause?, details? })`. Stable codes are `unsupported-platform`,
 `helper-unavailable`, `access-denied`, `layout-mismatch`, `timeout`, `incomplete`,
 `invalid-argument`, and `operation-failed`. `details` is optional diagnostic context.
+
+`@openclaw/proc-safe/inspect` exports the [command inspection API](inspect.md):
+
+```ts
+type ProcessCommand = {
+  readonly executable: string;
+  readonly argv: readonly string[];
+  readonly commandLine?: string;
+  readonly cwd?: string;
+  readonly environment: Readonly<Record<string, string>>;
+};
+function readProcessCommand(pid: number, options?: { environmentKeys?: readonly string[] }): ProcessCommand | null;
+function isSupported(): boolean;
+```

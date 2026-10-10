@@ -25,4 +25,12 @@ export interface NativeBinding {
   reapChild?(pid: number): ChildExit | null;
   systemdSupported?(): boolean;
   connectSystemd?(mode: string, address: string, timeoutMs: number): Promise<NativeSystemdBus>;
+  inspectSupported?(): boolean;
+  readProcessCommand?(pid: number, environmentKeys: string[]): {
+    executable: string;
+    argv: string[];
+    commandLine?: string;
+    cwd?: string;
+    environment: { key: string; value: string }[];
+  } | null;
 }

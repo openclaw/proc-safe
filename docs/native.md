@@ -59,3 +59,8 @@ Both the main thread and a real Worker query native identities. Packed npm and p
 installs test native loading, platform filtering, and Worker behavior outside the workspace.
 Run `pnpm benchmark:imports` and `bun scripts/benchmark-imports.mjs` for fresh-process import
 measurements. FreeBSD uses system Node; there is no supported Bun binary for FreeBSD.
+
+Command [inspection](inspect.md) uses Darwin `KERN_PROCARGS2` and Windows PEB parameters,
+including WOW64 layouts. Bounds and returned lengths are validated in Rust. Only requested
+environment entries cross N-API. Windows memory reads use one retained process handle;
+Darwin checks translation in Rust and refuses Rosetta before reading argument data.

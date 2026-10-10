@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 const count = 10;
-for (const name of ["identity", "darwin", "reaper", "diagnostics", "test-support", "systemd"]) {
+for (const name of ["identity", "darwin", "inspect", "reaper", "diagnostics", "test-support", "systemd"]) {
   const times = Array.from({ length: count }, () => Number(execFileSync(process.execPath, ["--input-type=module", "-e", `
     const start = performance.now();
     await import('./dist/${name}.js');

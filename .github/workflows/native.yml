@@ -48,6 +48,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libsystemd-dev
           sh scripts/setup-systemd-proof.sh
+      - name: Build real 32-bit Windows child
+        if: runner.os == 'Windows'
+        run: |
+          rustup target add i686-pc-windows-msvc
+          rustc --target i686-pc-windows-msvc test/fixtures/inspect-child.rs -o target/inspect-child-x86.exe
       - name: Native Node contracts and main/Worker proof
         env:
           PROC_SAFE_NATIVE: require
@@ -70,6 +75,14 @@ jobs:
           if [ -n "${PROC_SAFE_SYSTEMD_UNIT:-}" ]; then
             systemctl --user stop "$PROC_SAFE_SYSTEMD_UNIT"
           fi
+      - name: Real Rosetta refusal on main and Worker
+        if: matrix.label == 'darwin-arm64'
+        run: |
+          node_version="$(node --version)"
+          curl --fail --location "https://nodejs.org/dist/${node_version}/node-${node_version}-darwin-x64.tar.gz" -o "$RUNNER_TEMP/node-x64.tar.gz"
+          tar -xzf "$RUNNER_TEMP/node-x64.tar.gz" -C "$RUNNER_TEMP"
+          node scripts/build-native.mjs x86_64-apple-darwin
+          arch -x86_64 "$RUNNER_TEMP/node-${node_version}-darwin-x64/bin/node" scripts/inspect-proof.mjs --rosetta
       - name: Real Windows permission denial
         if: runner.os == 'Windows'
         run: node scripts/check-windows-denial.mjs

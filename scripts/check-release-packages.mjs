@@ -58,6 +58,7 @@ try {
       import { readProcessIdentity, isSupported } from '@openclaw/proc-safe/identity';
       import * as darwin from '@openclaw/proc-safe/darwin';
       import * as systemd from '@openclaw/proc-safe/systemd';
+      import * as inspect from '@openclaw/proc-safe/inspect';
       const require = createRequire(import.meta.url);
       assert.ok(isSupported());
       assert.equal(readProcessIdentity(process.pid).pid, process.pid);
@@ -65,6 +66,8 @@ try {
       assert.equal(typeof systemd.SystemdBus.connectPrivatePeer, 'function');
       assert.equal(typeof systemd.isSupported(), 'boolean');
       if (process.platform !== 'linux') assert.equal(systemd.isSupported(), false);
+      assert.equal(inspect.isSupported(), ['darwin', 'win32'].includes(process.platform));
+      if (inspect.isSupported()) assert.ok(inspect.readProcessCommand(process.pid).argv.length > 0);
       const root = require.resolve('@openclaw/proc-safe/package.json');
       const fromRoot = createRequire(root);
       for (const name of ${JSON.stringify(nativeTargets.map(t => t.package))}) {
@@ -80,7 +83,7 @@ try {
       assert.deepEqual(await exit, [0]);
     `;
     writeFileSync(join(cwd, "proof.mjs"), proof);
-    writeFileSync(join(cwd, "worker.mjs"), "import { parentPort } from 'node:worker_threads'; import { readProcessIdentity } from '@openclaw/proc-safe/identity'; import { SystemdBus, isSupported } from '@openclaw/proc-safe/systemd'; if (typeof SystemdBus.connectBroker !== 'function' || typeof isSupported() !== 'boolean') throw new Error('systemd import failed'); parentPort.postMessage(readProcessIdentity(process.pid).pid);\n");
+    writeFileSync(join(cwd, "worker.mjs"), "import { parentPort } from 'node:worker_threads'; import { readProcessIdentity } from '@openclaw/proc-safe/identity'; import { SystemdBus, isSupported } from '@openclaw/proc-safe/systemd'; if (typeof SystemdBus.connectBroker !== 'function' || typeof isSupported() !== 'boolean') throw new Error('systemd import failed'); import * as inspect from '@openclaw/proc-safe/inspect'; if (inspect.isSupported() && !inspect.readProcessCommand(process.pid).argv.length) throw new Error('missing command'); parentPort.postMessage(readProcessIdentity(process.pid).pid);\n");
     await run(process.execPath, ["proof.mjs"], { cwd, env: { ...env, PROC_SAFE_NATIVE: "require" }, timeout: 30_000 });
     console.log(`${manager} root-only install: native main + Worker + platform filtering passed`);
   }

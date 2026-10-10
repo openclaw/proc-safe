@@ -10,3 +10,5 @@ mod reaper;
 mod systemd;
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 mod test_support;
+#[cfg(any(target_os = "macos", windows))]
+mod inspect;

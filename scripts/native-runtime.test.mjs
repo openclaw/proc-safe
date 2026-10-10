@@ -9,3 +9,8 @@ test("native identity, lifecycle, ancestry, coalition, and Worker boundaries", a
 test("native diagnostics and test fixture boundaries", async () => {
   await import("./p2-proof.mjs");
 });
+
+test("native command inspection and Worker boundaries", async () => {
+  const { proveInspection } = await import("./inspect-proof.mjs");
+  await proveInspection();
+});
