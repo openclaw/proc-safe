@@ -13,13 +13,18 @@ public static class ProcessAcl {
 '@
 $info = [System.Diagnostics.ProcessStartInfo]::new()
 $info.FileName = $NodePath
-$info.Arguments = '-e "process.stdin.once(''data'',()=>process.exit(0))"'
+$info.Arguments = '-e "setInterval(()=>{},1000); process.stdin.once(''data'',()=>process.exit(0)); console.log(''ready'')"'
 $info.UseShellExecute = $false
 $info.CreateNoWindow = $true
 $info.RedirectStandardInput = $true
+$info.RedirectStandardOutput = $true
 $child = [System.Diagnostics.Process]::Start($info)
 $acl = [System.Runtime.InteropServices.Marshal]::AllocHGlobal(8)
 try {
+    $ready = $child.StandardOutput.ReadLineAsync()
+    if (-not $ready.Wait(10000) -or $ready.GetAwaiter().GetResult() -ne 'ready') {
+        throw 'denied-process fixture did not become ready'
+    }
     [Console]::Out.WriteLine($child.Id)
     [Console]::Out.Flush()
     if ([Console]::In.ReadLine() -ne 'deny') { throw 'expected deny command' }
@@ -27,6 +32,7 @@ try {
     $result = [ProcessAcl]::SetSecurityInfo($child.Handle, 6, [uint32]2147483652,
         [IntPtr]::Zero, [IntPtr]::Zero, $acl, [IntPtr]::Zero)
     if ($result -ne 0) { throw "SetSecurityInfo failed: $result" }
+    if ($child.HasExited) { throw 'denied-process fixture exited before inspection' }
     [Console]::Out.WriteLine('denied')
     [Console]::Out.Flush()
     if ([Console]::In.ReadLine() -ne 'release') { throw 'expected release command' }
