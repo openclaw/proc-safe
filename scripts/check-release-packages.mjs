@@ -34,6 +34,7 @@ for (const target of targets) {
   const directory = nativePackageDirectory(target);
   assert.ok(existsSync(new URL("proc-safe-native.node", directory)), `missing binary ${target.label}`);
   assert.ok(!readFileSync(new URL("proc-safe-native.node", directory)).includes(Buffer.from("failNextWindowsJobAssignment")), `fault injection is forbidden in published artifacts: ${target.label}`);
+  assert.ok(!readFileSync(new URL("proc-safe-native.node", directory)).includes(Buffer.from("openWindowsPinWithoutDebug")), `test impersonation is forbidden in published artifacts: ${target.label}`);
   pack(directory);
 }
 pack(new URL("../", import.meta.url));

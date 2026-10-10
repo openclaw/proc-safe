@@ -185,6 +185,124 @@ pub fn inspect_windows_pin_access(process: &NativePinnedProcess) -> Result<u32> 
     Ok(info.granted_access)
 }
 
+#[cfg(feature = "fault-injection")]
+#[napi(object, object_from_js = false)]
+pub struct TestPinnedProcessOpen {
+    pub process: NativePinnedProcess,
+    pub granted_access: u32,
+}
+
+/// Disable the debug bypass on this thread only, then use the production open path.
+#[cfg(feature = "fault-injection")]
+#[napi]
+pub fn open_windows_pin_without_debug(
+    pid: u32,
+    access: String,
+) -> Result<Option<TestPinnedProcessOpen>> {
+    use windows_sys::Win32::Security::*;
+    // Windows SDK PRIVILEGE_SET_ALL_NECESSARY (SystemServices in windows-sys).
+    const PRIVILEGE_SET_ALL_NECESSARY: u32 = 1;
+
+    struct RevertGuard(bool);
+    impl RevertGuard {
+        fn revert(&mut self) -> Result<()> {
+            if unsafe { RevertToSelf() } == 0 {
+                return Err(win_error("RevertToSelf"));
+            }
+            self.0 = false;
+            Ok(())
+        }
+    }
+    impl Drop for RevertGuard {
+        fn drop(&mut self) {
+            // Never return to JavaScript under a leftover impersonation token.
+            if self.0 && unsafe { RevertToSelf() } == 0 {
+                std::process::abort();
+            }
+        }
+    }
+
+    let mut existing = null_mut();
+    if unsafe { OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, 1, &mut existing) } != 0 {
+        Handle::new(existing, "OpenThreadToken(existing)")?.close()?;
+        return Err(failure(
+            "invalid-argument",
+            "test opener requires an unimpersonated thread",
+        ));
+    }
+    if unsafe { GetLastError() } != ERROR_NO_TOKEN {
+        return Err(win_error("OpenThreadToken(existing)"));
+    }
+    if unsafe { ImpersonateSelf(SecurityImpersonation) } == 0 {
+        return Err(win_error("ImpersonateSelf"));
+    }
+    let mut guard = RevertGuard(true);
+    let result = (|| {
+        let mut raw = null_mut();
+        if unsafe {
+            OpenThreadToken(
+                GetCurrentThread(),
+                TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
+                1,
+                &mut raw,
+            )
+        } == 0
+        {
+            return Err(win_error("OpenThreadToken"));
+        }
+        let token = Handle::new(raw, "OpenThreadToken")?;
+        let mut luid = unsafe { zeroed() };
+        if unsafe { LookupPrivilegeValueW(null(), SE_DEBUG_NAME, &mut luid) } == 0 {
+            return Err(win_error("LookupPrivilegeValueW"));
+        }
+        let state = TOKEN_PRIVILEGES {
+            PrivilegeCount: 1,
+            Privileges: [LUID_AND_ATTRIBUTES {
+                Luid: luid,
+                Attributes: 0,
+            }],
+        };
+        unsafe { SetLastError(ERROR_SUCCESS) };
+        if unsafe { AdjustTokenPrivileges(token.get()?, 0, &state, 0, null_mut(), null_mut()) } == 0
+        {
+            return Err(win_error("AdjustTokenPrivileges"));
+        }
+        let error = unsafe { GetLastError() };
+        if error != ERROR_SUCCESS && error != ERROR_NOT_ALL_ASSIGNED {
+            return Err(win_error("AdjustTokenPrivileges"));
+        }
+        let mut required = PRIVILEGE_SET {
+            PrivilegeCount: 1,
+            Control: PRIVILEGE_SET_ALL_NECESSARY,
+            Privilege: [LUID_AND_ATTRIBUTES {
+                Luid: luid,
+                Attributes: SE_PRIVILEGE_ENABLED,
+            }],
+        };
+        let mut enabled = 0;
+        if unsafe { PrivilegeCheck(token.get()?, &mut required, &mut enabled) } == 0 {
+            return Err(win_error("PrivilegeCheck"));
+        }
+        if enabled != 0 {
+            return Err(failure(
+                "operation-failed",
+                "debug privilege remains enabled",
+            ));
+        }
+        open_pinned_process(pid, None, None, access)?
+            .map(|process| {
+                let granted_access = inspect_windows_pin_access(&process)?;
+                Ok(TestPinnedProcessOpen {
+                    process,
+                    granted_access,
+                })
+            })
+            .transpose()
+    })();
+    guard.revert()?;
+    result
+}
+
 #[napi]
 pub fn open_pinned_process(
     pid: u32,

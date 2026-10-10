@@ -144,7 +144,9 @@ exit code 259, named jobs, cancellation, detached descendants, output EOF before
 nested jobs, Worker cleanup, process death, retained process lifetime, remote-handle rollback,
 and owner death during handoff. An independent Rust fixture supplies descendants and owners.
 Each thread also tests wrong-mode refusals and an observer of a process whose DACL denies
-DUP_HANDLE. The separate test addon queries the kernel's granted handle access using
+DUP_HANDLE. For the denial proof, the separate test addon impersonates the calling thread,
+disables SeDebugPrivilege, invokes the same pinned-open path, and always reverts before
+returning. The process token is unchanged. The test addon queries granted handle access using
 ObjectBasicInformation and verifies all three exact masks on the main thread and a Worker.
 
 The `fault-injection` Cargo feature is off by default. Windows CI builds its addon in a

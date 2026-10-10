@@ -15,114 +15,6 @@ fn main() {
     };
     let args: Vec<String> = std::env::args().collect();
     match args[1].as_str() {
-        "token-info" => {
-            use std::{
-                mem::size_of,
-                os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle},
-            };
-            use windows_sys::Win32::Security::*;
-            // SID attribute bits from the Windows SDK (SystemServices in windows-sys).
-            const SE_GROUP_ENABLED: u32 = 0x4;
-            const SE_GROUP_USE_FOR_DENY_ONLY: u32 = 0x10;
-            let raw = unsafe {
-                OpenProcess(
-                    PROCESS_QUERY_LIMITED_INFORMATION,
-                    0,
-                    args[2].parse().unwrap(),
-                )
-            };
-            assert!(!raw.is_null());
-            let process = unsafe { OwnedHandle::from_raw_handle(raw) };
-            let mut raw_token = std::ptr::null_mut();
-            assert_ne!(
-                unsafe { OpenProcessToken(process.as_raw_handle(), TOKEN_QUERY, &mut raw_token) },
-                0
-            );
-            let token = unsafe { OwnedHandle::from_raw_handle(raw_token) };
-            let information = |class| {
-                let mut bytes = 0;
-                unsafe {
-                    GetTokenInformation(
-                        token.as_raw_handle(),
-                        class,
-                        std::ptr::null_mut(),
-                        0,
-                        &mut bytes,
-                    )
-                };
-                assert!(bytes > 0);
-                let mut data = vec![0usize; (bytes as usize).div_ceil(size_of::<usize>())];
-                assert_ne!(
-                    unsafe {
-                        GetTokenInformation(
-                            token.as_raw_handle(),
-                            class,
-                            data.as_mut_ptr().cast(),
-                            bytes,
-                            &mut bytes,
-                        )
-                    },
-                    0
-                );
-                data
-            };
-            let privileges = information(TokenPrivileges);
-            let privileges = unsafe { &*privileges.as_ptr().cast::<TOKEN_PRIVILEGES>() };
-            let entries = unsafe {
-                std::slice::from_raw_parts(
-                    privileges.Privileges.as_ptr(),
-                    privileges.PrivilegeCount as usize,
-                )
-            };
-            let privilege = |name: &str| {
-                let wide: Vec<u16> = name.encode_utf16().chain(Some(0)).collect();
-                let mut luid = unsafe { std::mem::zeroed() };
-                assert_ne!(
-                    unsafe { LookupPrivilegeValueW(null(), wide.as_ptr(), &mut luid) },
-                    0
-                );
-                let entry = entries.iter().find(|entry| {
-                    entry.Luid.LowPart == luid.LowPart && entry.Luid.HighPart == luid.HighPart
-                });
-                format!(
-                    "{{\"present\":{},\"enabled\":{}}}",
-                    entry.is_some(),
-                    entry.is_some_and(|e| e.Attributes & SE_PRIVILEGE_ENABLED != 0)
-                )
-            };
-            let groups = information(TokenGroups);
-            let groups = unsafe { &*groups.as_ptr().cast::<TOKEN_GROUPS>() };
-            let groups = unsafe {
-                std::slice::from_raw_parts(groups.Groups.as_ptr(), groups.GroupCount as usize)
-            };
-            let mut sid = [0u32; 17];
-            let mut sid_len = size_of::<[u32; 17]>() as u32;
-            assert_ne!(
-                unsafe {
-                    CreateWellKnownSid(
-                        WinBuiltinAdministratorsSid,
-                        std::ptr::null_mut(),
-                        sid.as_mut_ptr().cast(),
-                        &mut sid_len,
-                    )
-                },
-                0
-            );
-            let admin = groups
-                .iter()
-                .find(|g| unsafe { EqualSid(g.Sid, sid.as_mut_ptr().cast()) } != 0);
-            let elevation = information(TokenElevation);
-            let elevation = unsafe { &*elevation.as_ptr().cast::<TOKEN_ELEVATION>() };
-            println!(
-                "{{\"debug\":{},\"impersonate\":{},\"elevated\":{},\"admin\":{{\"present\":{},\"enabled\":{},\"denyOnly\":{}}}}}",
-                privilege("SeDebugPrivilege"),
-                privilege("SeImpersonatePrivilege"),
-                elevation.TokenIsElevated != 0,
-                admin.is_some(),
-                admin.is_some_and(|g| g.Attributes & SE_GROUP_ENABLED != 0),
-                admin.is_some_and(|g| g.Attributes & SE_GROUP_USE_FOR_DENY_ONLY != 0)
-            );
-        }
         "environment" => {
             fn json(value: &str) -> String {
                 let mut out = String::from("\"");
@@ -227,7 +119,12 @@ fn main() {
                         );
                         assert_ne!(
                             unsafe {
-                                AddAccessAllowedAce(acl, ACL_REVISION, PROCESS_ALL_ACCESS, sid_ptr)
+                                AddAccessAllowedAce(
+                                    acl,
+                                    ACL_REVISION,
+                                    PROCESS_QUERY_LIMITED_INFORMATION,
+                                    sid_ptr,
+                                )
                             },
                             0
                         );

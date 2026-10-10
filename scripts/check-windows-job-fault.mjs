@@ -13,6 +13,8 @@ const production = readFileSync(productionPath);
 assert.ok(!production.includes(Buffer.from("failNextWindowsJobAssignment")));
 assert.equal(Object.hasOwn(require(productionPath), "failNextWindowsJobAssignment"), false);
 assert.equal(Object.hasOwn(require(productionPath), "inspectWindowsPinAccess"), false);
+assert.ok(!production.includes(Buffer.from("openWindowsPinWithoutDebug")));
+assert.equal(Object.hasOwn(require(productionPath), "openWindowsPinWithoutDebug"), false);
 const directory = resolve("target/job-fault");
 const addon = resolve(directory, "proc-safe-job-fault.node");
 if (!process.argv.includes("--test-only")) {

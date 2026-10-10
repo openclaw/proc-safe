@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { fromNativeError } from "../dist/native-error.js";
 
 // Test harness only: production loading has no override or fault configuration.
 export function installPinTestBinding() {
@@ -9,6 +10,7 @@ export function installPinTestBinding() {
   const injected = require(process.env.PROC_SAFE_TEST_JOB_FAULT_ADDON);
   assert.equal(typeof injected.failNextWindowsJobAssignment, "function");
   assert.equal(typeof injected.inspectWindowsPinAccess, "function");
+  assert.equal(typeof injected.openWindowsPinWithoutDebug, "function");
   let lastNativePin;
   require.cache[nativePath] = { id: nativePath, filename: nativePath, loaded: true, exports: {
     ...injected,
@@ -17,5 +19,9 @@ export function installPinTestBinding() {
   return {
     injectAssignmentFailure: injected.failNextWindowsJobAssignment,
     inspectPinAccess: () => injected.inspectWindowsPinAccess(lastNativePin),
+    openPinWithoutDebug(pid, access) {
+      try { return injected.openWindowsPinWithoutDebug(pid, access); }
+      catch (error) { throw fromNativeError(error); }
+    },
   };
 }

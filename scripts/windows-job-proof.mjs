@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { installPinTestBinding } from "./windows-pin-test-binding.mjs";
+import { ProcSafeError } from "../dist/errors.js";
 import { spawn, execFileSync } from "node:child_process";
 import { once } from "node:events";
 import { createInterface } from "node:readline";
-import { mkdtempSync, existsSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,7 +13,7 @@ import { WindowsJob, PinnedProcess, bindCurrentProcessLifetimeTo, retainCurrentP
 
 const fixture = resolve(`target/${process.arch === "arm64" ? "aarch64" : "x86_64"}-pc-windows-msvc/release/proc-safe-job-fixture.exe`);
 const entry = fileURLToPath(import.meta.url);
-const { injectAssignmentFailure, inspectPinAccess } = installPinTestBinding();
+const { injectAssignmentFailure, inspectPinAccess, openPinWithoutDebug } = installPinTestBinding();
 const pause = () => new Promise(r => setTimeout(r, 5));
 async function until(fn) {
   const deadline = performance.now() + 8000;
@@ -220,59 +221,37 @@ async function accessModes() {
     }
   } finally { job.close(); target.stdin.write("exit\n"); await exit; }
 
-  await restrictedAccess();
+  if (openPinWithoutDebug) await deniedAccess();
 }
 
-async function restrictedAccess() {
-  const directory = mkdtempSync(join(tmpdir(), "proc-safe-pin-denial-"));
+async function deniedAccess() {
   const target = spawn(fixture, ["owner"], { stdio: ["pipe", "pipe", "inherit"] });
   const targetExit = once(target, "exit");
   const input = createInterface({ input: target.stdout })[Symbol.asyncIterator]();
-  const restrictedFixture = fixture.replace("proc-safe-job-fixture.exe", "proc-safe-restricted-fixture.exe");
-  let opener, openerExit;
-  let output = "", errors = "";
+  let observer;
   try {
     assert.equal((await input.next()).value, "ready");
-    const token = JSON.parse(execFileSync(fixture, ["token-info", String(process.pid)], { encoding: "utf8" }));
-    console.error(JSON.stringify({ pinDenialOriginalToken: token }));
-    writeFileSync(join(directory, "pid"), String(target.pid));
-    opener = spawn(restrictedFixture, [process.execPath, fileURLToPath(new URL("./windows-pin-denial-proof.mjs", import.meta.url)), directory, "--pin-access"], { stdio: ["ignore", "pipe", "pipe"] });
-    openerExit = once(opener, "exit");
-    opener.stdout.on("data", b => output += b);
-    opener.stderr.on("data", b => errors += b);
-    await until(() => {
-      assert.equal(opener.exitCode, null, errors);
-      return existsSync(join(directory, "ready"));
-    });
     target.stdin.write("deny-duplicate\n");
     assert.equal((await input.next()).value, "denied");
-    let unrestrictedOpenAllowed = false;
-    try {
-      const pin = PinnedProcess.open(target.pid, { access: "lifetime-owner" });
-      assert.ok(pin);
-      try {
-        unrestrictedOpenAllowed = true;
-        if (inspectPinAccess) assert.equal(inspectPinAccess(), 0x101040);
-      } finally { pin.close(); }
-    } catch (e) { assert.equal(e.code, "access-denied"); }
-    console.error(JSON.stringify({ pinDenialOriginalCaller: { ...token, unrestrictedOpenAllowed } }));
-    writeFileSync(join(directory, "go"), "go");
-    await until(() => {
-      assert.equal(opener.exitCode, null, errors);
-      return existsSync(join(directory, "verified"));
-    });
+    const opened = openPinWithoutDebug(target.pid, "observe");
+    assert.ok(opened);
+    observer = opened.process;
+    assert.equal(opened.grantedAccess, 0x1000);
+    assert.equal(observer.access, "observe");
+    assert.equal(observer.identity.exited, false);
+    assert.ok(observer.imagePath.endsWith("proc-safe-job-fixture.exe"));
+    assert.throws(() => openPinWithoutDebug(target.pid, "lifetime-owner"), e => e instanceof ProcSafeError && e.code === "access-denied");
+    // A second helper call must work after the error path reverted impersonation.
+    const again = openPinWithoutDebug(target.pid, "observe");
+    assert.ok(again);
+    try { assert.equal(again.grantedAccess, 0x1000); } finally { again.process.close(); }
     target.stdin.write("exit\n");
     assert.deepEqual(await targetExit, [0, null]);
-    writeFileSync(join(directory, "released"), "released");
-    assert.deepEqual(await openerExit, [0, null], errors);
+    assert.equal(observer.identity.exited, true);
   } finally {
+    observer?.close();
     if (target.exitCode === null && target.signalCode === null) target.stdin.write("exit\n");
     await targetExit;
-    // Keep the launcher's existing watchdog alive until its child has exited.
-    writeFileSync(join(directory, "abort"), "abort");
-    if (openerExit) await openerExit;
-    if (output) console.error(output.trim());
-    rmSync(directory, { recursive: true, force: true });
   }
 }
 
