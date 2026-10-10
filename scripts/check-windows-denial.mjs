@@ -24,3 +24,5 @@ try {
   assert.deepEqual(await closed, [0, null]);
 }
 console.log("controlled process ACL denial verified on main and Worker");
+const tokenFixture = fileURLToPath(new URL(`../target/${hostNativeTarget().rust}/release/proc-safe-restricted-fixture.exe`, import.meta.url));
+execFileSync(tokenFixture, [process.execPath, fileURLToPath(new URL("./census-token-denial-proof.mjs", import.meta.url)), "0", "--deny-token"], { stdio: "inherit" });

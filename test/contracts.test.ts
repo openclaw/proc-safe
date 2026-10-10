@@ -31,6 +31,8 @@ describe("public contracts", () => {
       catch (e) { if (e.code !== 'helper-unavailable' && e.code !== 'unsupported-platform') throw e; }
       try { inspect.readProcessCommand(process.pid); throw new Error('succeeded'); }
       catch (e) { if (e.code !== 'helper-unavailable' && e.code !== 'unsupported-platform') throw e; }
+      try { inspect.listProcesses({ timeoutMs: 1000 }); throw new Error('succeeded'); }
+      catch (e) { if (e.code !== 'helper-unavailable' && e.code !== 'unsupported-platform') throw e; }
       console.log('off');
     `], { encoding: "utf8", env: { ...process.env, PROC_SAFE_NATIVE: "off" } });
     expect(output.trim()).toBe("off");

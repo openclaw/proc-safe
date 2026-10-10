@@ -2,6 +2,7 @@ import type { ProcessIdentity } from "./identity.js";
 import type { DarwinCoalition } from "./darwin.js";
 import type { PageCacheResidency } from "./diagnostics.js";
 import type { ChildExit, ChildWaitState } from "./reaper.js";
+import type { ProcessSnapshot } from "./inspect.js";
 import type { SystemdValue } from "./systemd.js";
 
 export interface NativeSystemdBus {
@@ -33,4 +34,10 @@ export interface NativeBinding {
     cwd?: string;
     environment: { key: string; value: string }[];
   } | null;
+  listProcesses?(timeoutMs: number, includeCommand: boolean): {
+    pid: number;
+    owner: ProcessSnapshot["owner"];
+    identity?: ProcessIdentity;
+    command?: NonNullable<ReturnType<NonNullable<NativeBinding["readProcessCommand"]>>>;
+  }[];
 }

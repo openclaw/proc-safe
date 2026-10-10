@@ -94,5 +94,12 @@ type ProcessCommand = {
   readonly environment: Readonly<Record<string, string>>;
 };
 function readProcessCommand(pid: number, options?: { environmentKeys?: readonly string[] }): ProcessCommand | null;
+type ProcessSnapshot = {
+  readonly pid: number;
+  readonly identity?: ProcessIdentity;
+  readonly owner: "same" | "different" | "unknown";
+  readonly command?: ProcessCommand;
+};
+function listProcesses(options: { timeoutMs: number; includeCommand?: boolean }): ProcessSnapshot[];
 function isSupported(): boolean;
 ```

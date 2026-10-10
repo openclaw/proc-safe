@@ -8,13 +8,16 @@ postinstall builds, shell fallback, or compression dependencies.
 ```ts
 import { readProcessIdentity, readProcessAncestry } from '@openclaw/proc-safe/identity';
 import { readProcessCoalition } from '@openclaw/proc-safe/darwin';
-import { readProcessCommand } from '@openclaw/proc-safe/inspect';
+import { readProcessCommand, listProcesses } from '@openclaw/proc-safe/inspect';
 
 const identity = readProcessIdentity(process.pid);
 const ancestors = readProcessAncestry(process.pid, { maxDepth: 32 });
 if (process.platform === 'darwin') {
   const coalition = readProcessCoalition(process.pid);
   const command = readProcessCommand(process.pid, { environmentKeys: ['MY_APPLICATION_INSTANCE'] });
+}
+if (process.platform === 'win32') {
+  const processes = listProcesses({ timeoutMs: 5000, includeCommand: true });
 }
 ```
 

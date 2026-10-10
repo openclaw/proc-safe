@@ -64,3 +64,9 @@ Command [inspection](inspect.md) uses Darwin `KERN_PROCARGS2` and Windows PEB pa
 including WOW64 layouts. Bounds and returned lengths are validated in Rust. Only requested
 environment entries cross N-API. Windows memory reads use one retained process handle;
 Darwin checks translation in Rust and refuses Rosetta before reading argument data.
+
+Windows census enumeration retains all observed PIDs within a 65,536-entry bound, including
+inaccessible and vanished rows. Each row uses one retained process object for validated token
+SID comparison, existing identity decoding, and optional command inspection. Native monotonic
+budget checks and a final wrapper check reject expired calls without a partial result. Windows
+environment selection uses ordinal case-insensitive comparison and preserves requested casing.

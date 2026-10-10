@@ -45,6 +45,21 @@ pub fn read_process_command(
     return windows::read(pid, &environment_keys);
 }
 
+#[cfg(windows)]
+#[napi(object)]
+pub struct ProcessSnapshot {
+    pub pid: u32,
+    pub identity: Option<crate::identity::ProcessIdentity>,
+    pub owner: String,
+    pub command: Option<ProcessCommand>,
+}
+
+#[cfg(windows)]
+#[napi]
+pub fn list_processes(timeout_ms: f64, include_command: bool) -> Result<Vec<ProcessSnapshot>> {
+    windows::list(timeout_ms, include_command)
+}
+
 #[cfg(target_os = "macos")]
 mod macos {
     use super::*;
@@ -123,7 +138,7 @@ mod macos {
             }
             return Err(error);
         }
-        if size < 5 || size > bytes.len() {
+        if size < 5 || size >= bytes.len() {
             return Err(failure("incomplete", "truncated Darwin process arguments"));
         }
         bytes.truncate(size);
@@ -182,7 +197,9 @@ mod macos {
                 // XNU's Apple vector begins with pfz at an aligned boundary. With
                 // zero padding it is indistinguishable from an envp entry: refuse
                 // the whole observation instead of returning startup metadata.
-                if (entry_offset - 4).is_multiple_of(8) && entry.starts_with(b"pfz=") {
+                if (entry_offset - 4 + b"executable_path=".len()).is_multiple_of(8)
+                    && entry.starts_with(b"pfz=")
+                {
                     return Err(failure(
                         "incomplete",
                         "ambiguous Darwin environment boundary",
@@ -222,16 +239,20 @@ mod windows {
     };
     use windows_sys::Win32::{
         Foundation::{
-            CloseHandle, ERROR_ACCESS_DENIED, ERROR_INVALID_PARAMETER, GetLastError, HANDLE,
-            LocalFree,
+            CloseHandle, ERROR_ACCESS_DENIED, ERROR_INSUFFICIENT_BUFFER, ERROR_INVALID_PARAMETER,
+            GetLastError, HANDLE, LocalFree,
         },
+        Globalization::{CSTR_EQUAL, CompareStringOrdinal},
+        Security::{EqualSid, GetTokenInformation, IsValidSid, TOKEN_QUERY, TOKEN_USER, TokenUser},
         System::{
             Diagnostics::Debug::ReadProcessMemory,
             Memory::{
                 MEM_COMMIT, MEMORY_BASIC_INFORMATION, PAGE_GUARD, PAGE_NOACCESS, VirtualQueryEx,
             },
+            ProcessStatus::K32EnumProcesses,
             Threading::{
-                OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ, QueryFullProcessImageNameW,
+                GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_QUERY_INFORMATION,
+                PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_VM_READ, QueryFullProcessImageNameW,
             },
         },
         UI::Shell::CommandLineToArgvW,
@@ -444,7 +465,12 @@ mod windows {
                 .checked_add(length)
                 .ok_or_else(|| failure("layout-mismatch", "environment address overflow"))?;
         }
-        let mut result = Vec::new();
+        let mut result: Vec<EnvironmentEntry> = Vec::new();
+        let names: Vec<_> = keys
+            .iter()
+            .map(|key| (key, key.encode_utf16().collect::<Vec<_>>()))
+            .collect();
+        // Compare in Windows' ordinal case-insensitive domain, then retain caller casing.
         // Decode only requested values; unrelated environment data never crosses N-API.
         for entry in bytes
             .as_chunks::<2>()
@@ -455,16 +481,32 @@ mod windows {
             .split(|&unit| unit == 0)
         {
             if let Some(separator) = entry.iter().position(|&unit| unit == b'=' as u16) {
-                for key in keys {
-                    if key.encode_utf16().eq(entry[..separator].iter().copied()) {
+                if separator == 0 {
+                    continue;
+                }
+                for (key, name) in &names {
+                    let comparison = unsafe {
+                        CompareStringOrdinal(
+                            name.as_ptr(),
+                            name.len() as i32,
+                            entry.as_ptr(),
+                            separator as i32,
+                            1,
+                        )
+                    };
+                    if comparison == 0 {
+                        return Err(win_error("CompareStringOrdinal"));
+                    }
+                    if comparison == CSTR_EQUAL
+                        && !result.iter().any(|existing| existing.key == **key)
+                    {
                         let value = String::from_utf16(&entry[separator + 1..]).map_err(|_| {
                             failure("layout-mismatch", "invalid environment UTF-16")
                         })?;
                         result.push(EnvironmentEntry {
-                            key: key.clone(),
+                            key: (*key).clone(),
                             value,
                         });
-                        break;
                     }
                 }
             }
@@ -508,6 +550,176 @@ mod windows {
         Ok(result)
     }
 
+    struct Budget {
+        started: std::time::Instant,
+        timeout_ms: f64,
+    }
+
+    impl Budget {
+        fn check(&self) -> Result<()> {
+            if self.started.elapsed().as_secs_f64() * 1000.0 >= self.timeout_ms {
+                return Err(failure("timeout", "process census exceeded timeoutMs"));
+            }
+            Ok(())
+        }
+    }
+
+    fn token_owner(handle: HANDLE) -> Result<Vec<u8>> {
+        let mut token = std::ptr::null_mut();
+        if unsafe { OpenProcessToken(handle, TOKEN_QUERY, &mut token) } == 0 {
+            return Err(win_error("OpenProcessToken"));
+        }
+        let token = OwnedHandle(token);
+        let mut length = 0;
+        if unsafe { GetTokenInformation(token.0, TokenUser, std::ptr::null_mut(), 0, &mut length) }
+            != 0
+            || unsafe { GetLastError() } != ERROR_INSUFFICIENT_BUFFER
+        {
+            return Err(win_error("GetTokenInformation size"));
+        }
+        if (length as usize) < size_of::<TOKEN_USER>() || length > 65536 {
+            return Err(failure("layout-mismatch", "invalid token information size"));
+        }
+        let mut bytes = vec![0u8; length as usize];
+        if unsafe {
+            GetTokenInformation(
+                token.0,
+                TokenUser,
+                bytes.as_mut_ptr().cast(),
+                length,
+                &mut length,
+            )
+        } == 0
+        {
+            return Err(win_error("GetTokenInformation"));
+        }
+        if (length as usize) < size_of::<TOKEN_USER>() || length as usize > bytes.len() {
+            return Err(failure("layout-mismatch", "invalid returned token size"));
+        }
+        let user = unsafe { std::ptr::read_unaligned(bytes.as_ptr().cast::<TOKEN_USER>()) };
+        let offset = (user.User.Sid as usize)
+            .checked_sub(bytes.as_ptr() as usize)
+            .ok_or_else(|| failure("layout-mismatch", "token SID outside allocation"))?;
+        let header = bytes
+            .get(offset..offset.saturating_add(8))
+            .filter(|_| offset + 8 <= length as usize)
+            .ok_or_else(|| failure("layout-mismatch", "truncated token SID"))?;
+        let sid_length = 8 + usize::from(header[1]) * 4;
+        if header[1] > 15 || offset.saturating_add(sid_length) > length as usize {
+            return Err(failure("layout-mismatch", "invalid token SID length"));
+        }
+        if unsafe { IsValidSid(user.User.Sid) } == 0 {
+            return Err(failure("layout-mismatch", "invalid token SID"));
+        }
+        Ok(bytes[offset..offset + sid_length].to_vec())
+    }
+
+    fn observed<T>(result: Result<T>) -> Result<Option<T>> {
+        match result {
+            Ok(value) => Ok(Some(value)),
+            // Unavailable per-row observations do not erase an enumerated PID.
+            Err(error)
+                if error.reason.starts_with("timeout:")
+                    || error.reason.starts_with("invalid-argument:") =>
+            {
+                Err(error)
+            }
+            Err(_) => Ok(None),
+        }
+    }
+
+    pub fn list(timeout_ms: f64, include_command: bool) -> Result<Vec<ProcessSnapshot>> {
+        let budget = Budget {
+            started: std::time::Instant::now(),
+            timeout_ms,
+        };
+        if !timeout_ms.is_finite() || timeout_ms <= 0.0 {
+            return Err(failure(
+                "invalid-argument",
+                "timeoutMs must be positive and finite",
+            ));
+        }
+        budget.check()?;
+        const PID_CAP: usize = 65_536;
+        let mut pids = vec![0u32; PID_CAP];
+        let mut actual = 0;
+        let capacity_bytes = (PID_CAP * size_of::<u32>()) as u32;
+        if unsafe { K32EnumProcesses(pids.as_mut_ptr(), capacity_bytes, &mut actual) } == 0 {
+            return Err(failure("incomplete", "Windows process enumeration failed"));
+        }
+        if actual >= capacity_bytes || !(actual as usize).is_multiple_of(size_of::<u32>()) {
+            return Err(failure(
+                "incomplete",
+                "Windows process enumeration exceeded the PID cap or was truncated",
+            ));
+        }
+        budget.check()?;
+        pids.truncate(actual as usize / size_of::<u32>());
+        if pids.is_empty() || !pids.contains(&std::process::id()) {
+            return Err(failure(
+                "incomplete",
+                "Windows process enumeration omitted the caller",
+            ));
+        }
+        let mut seen = std::collections::HashSet::with_capacity(pids.len());
+        if pids.iter().any(|pid| !seen.insert(*pid)) {
+            return Err(failure(
+                "incomplete",
+                "Windows process enumeration repeated a PID",
+            ));
+        }
+        let self_owner = observed(token_owner(unsafe { GetCurrentProcess() }))?;
+        let mut rows = Vec::with_capacity(pids.len());
+        for pid in pids {
+            budget.check()?;
+            let mut row = ProcessSnapshot {
+                pid,
+                identity: None,
+                owner: "unknown".into(),
+                command: None,
+            };
+            let mut can_read_command = include_command;
+            let mut raw = if include_command {
+                unsafe { OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, pid) }
+            } else {
+                std::ptr::null_mut()
+            };
+            if raw.is_null() {
+                can_read_command = false;
+                raw = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+            }
+            if !raw.is_null() {
+                // All facts in a row share this retained object, including across PID exit/reuse.
+                let handle = OwnedHandle(raw);
+                if let Some(self_owner) = &self_owner
+                    && let Some(owner) = observed(token_owner(handle.0))?
+                {
+                    row.owner = if unsafe {
+                        EqualSid(
+                            self_owner.as_ptr().cast_mut().cast(),
+                            owner.as_ptr().cast_mut().cast(),
+                        )
+                    } != 0
+                    {
+                        "same".into()
+                    } else {
+                        "different".into()
+                    };
+                }
+                budget.check()?;
+                row.identity = observed(crate::identity::windows::read_handle(pid, handle.0))?;
+                budget.check()?;
+                if can_read_command {
+                    row.command = observed(read_handle(pid, handle.0, &[]))?;
+                }
+            }
+            budget.check()?;
+            rows.push(row);
+        }
+        budget.check()?;
+        Ok(rows)
+    }
+
     pub fn read(pid: u32, keys: &[String]) -> Result<Option<ProcessCommand>> {
         let raw = unsafe { OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, pid) };
         if raw.is_null() {
@@ -517,13 +729,17 @@ mod windows {
             return Err(win_error("OpenProcess"));
         }
         let handle = OwnedHandle(raw);
+        read_handle(pid, handle.0, keys).map(Some)
+    }
+
+    fn read_handle(pid: u32, handle: HANDLE, keys: &[String]) -> Result<ProcessCommand> {
         let mut basic = [0u8; 48];
-        query(handle.0, 0, &mut basic)?;
+        query(handle, 0, &mut basic)?;
         if pointer(&basic, 32, false) != pid as usize {
             return Err(failure("layout-mismatch", "process PID does not match"));
         }
         let mut wow64 = [0u8; 8];
-        query(handle.0, 26, &mut wow64)?;
+        query(handle, 26, &mut wow64)?;
         let wow64_peb = pointer(&wow64, 0, false);
         let narrow = wow64_peb != 0;
         let peb = if narrow {
@@ -531,14 +747,14 @@ mod windows {
         } else {
             pointer(&basic, 8, false)
         };
-        let peb_bytes = memory(handle.0, peb, if narrow { 20 } else { 40 })?;
+        let peb_bytes = memory(handle, peb, if narrow { 20 } else { 40 })?;
         let address = location(
             pointer(&peb_bytes, if narrow { 16 } else { 32 }, narrow),
             0,
             true,
             narrow,
         )?;
-        let header = memory(handle.0, address, if narrow { 76 } else { 136 })?;
+        let header = memory(handle, address, if narrow { 76 } else { 136 })?;
         let maximum = u32::from_le_bytes(header[..4].try_into().unwrap()) as usize;
         let length = u32::from_le_bytes(header[4..8].try_into().unwrap()) as usize;
         if length < header.len() || length > maximum || maximum > ENV_LIMIT {
@@ -549,7 +765,7 @@ mod windows {
         }
         let normalized = u32::from_le_bytes(header[8..12].try_into().unwrap()) & 1 != 0;
         let command_line = field(
-            handle.0,
+            handle,
             &header,
             if narrow { 64 } else { 112 },
             narrow,
@@ -560,7 +776,7 @@ mod windows {
             return Err(failure("incomplete", "empty process command line"));
         }
         let cwd = field(
-            handle.0,
+            handle,
             &header,
             if narrow { 36 } else { 56 },
             narrow,
@@ -569,7 +785,7 @@ mod windows {
         )?;
         let mut path = vec![0u16; 32768];
         let mut path_length = path.len() as u32;
-        if unsafe { QueryFullProcessImageNameW(handle.0, 0, path.as_mut_ptr(), &mut path_length) }
+        if unsafe { QueryFullProcessImageNameW(handle, 0, path.as_mut_ptr(), &mut path_length) }
             == 0
         {
             return Err(win_error("QueryFullProcessImageNameW"));
@@ -583,14 +799,14 @@ mod windows {
             Vec::new()
         } else {
             let value = pointer(&header, if narrow { 72 } else { 128 }, narrow);
-            environment(handle.0, location(value, address, true, narrow)?, keys)?
+            environment(handle, location(value, address, true, narrow)?, keys)?
         };
-        Ok(Some(ProcessCommand {
+        Ok(ProcessCommand {
             executable,
             argv: argv(&command_line)?,
             command_line: Some(command_line),
             cwd: Some(cwd),
             environment,
-        }))
+        })
     }
 }

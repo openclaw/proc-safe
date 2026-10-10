@@ -7,6 +7,18 @@ fn main() {
         suspended(&args[1..]);
         return;
     }
+    #[cfg(target_os = "macos")]
+    if args.first().map(String::as_str) == Some("--large-argv") {
+        use std::os::unix::process::CommandExt;
+        let limit = unsafe { libc::sysconf(libc::_SC_ARG_MAX) };
+        assert!(limit > 128);
+        let code = Command::new(std::env::current_exe().unwrap())
+            .arg0("x".repeat(limit as usize - 64))
+            .env_clear()
+            .status()
+            .unwrap();
+        std::process::exit(code.code().unwrap_or(1));
+    }
     if args
         .first()
         .is_some_and(|mode| mode.starts_with("--launch"))

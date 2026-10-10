@@ -66,19 +66,22 @@ pub fn read(pid: u32) -> Result<Option<ProcessIdentity>> {
         return Err(error("OpenProcess"));
     }
     let handle = OwnedHandle(raw);
+    read_handle(pid, handle.0).map(Some)
+}
+
+pub(crate) fn read_handle(pid: u32, handle: HANDLE) -> Result<ProcessIdentity> {
     let mut created: FILETIME = unsafe { zeroed() };
     let mut exited: FILETIME = unsafe { zeroed() };
     let mut kernel: FILETIME = unsafe { zeroed() };
     let mut user: FILETIME = unsafe { zeroed() };
-    if unsafe { GetProcessTimes(handle.0, &mut created, &mut exited, &mut kernel, &mut user) } == 0
-    {
+    if unsafe { GetProcessTimes(handle, &mut created, &mut exited, &mut kernel, &mut user) } == 0 {
         return Err(error("GetProcessTimes"));
     }
     let mut basic: BasicInformation = unsafe { zeroed() };
     let mut actual = 0;
     let result = unsafe {
         NtQueryInformationProcess(
-            handle.0,
+            handle,
             0,
             (&mut basic as *mut BasicInformation).cast(),
             size_of::<BasicInformation>() as u32,
@@ -110,18 +113,18 @@ pub fn read(pid: u32) -> Result<Option<ProcessIdentity>> {
         .checked_sub(11_644_473_600_000_000)
         .ok_or_else(|| failure("layout-mismatch", "invalid process FILETIME"))?;
     let mut exit_code = 0;
-    if unsafe { GetExitCodeProcess(handle.0, &mut exit_code) } == 0 {
+    if unsafe { GetExitCodeProcess(handle, &mut exit_code) } == 0 {
         return Err(error("GetExitCodeProcess"));
     }
     let mut has_exited = exit_code != STILL_ACTIVE as u32;
     if !has_exited {
         // An application can itself return 259. The kernel exit timestamp is unambiguous.
-        if unsafe { GetProcessTimes(handle.0, &mut created, &mut exited, &mut kernel, &mut user) }
+        if unsafe { GetProcessTimes(handle, &mut created, &mut exited, &mut kernel, &mut user) }
             == 0
         {
             return Err(error("GetProcessTimes"));
         }
         has_exited = exited.dwHighDateTime != 0 || exited.dwLowDateTime != 0;
     }
-    identity(pid, basic.parent_pid as u32, micros, 1.0, None, has_exited).map(Some)
+    identity(pid, basic.parent_pid as u32, micros, 1.0, None, has_exited)
 }
