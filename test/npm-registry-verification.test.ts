@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { describe, expect, it, vi } from "vitest";
 import {
   FatalRegistryError,
@@ -31,7 +32,7 @@ describe("npm registry verification", () => {
       fixture.bundle,
       {
         certificateIdentityURI:
-          "https://github.com/openclaw/proc-safe/.github/workflows/release.yml@refs/tags/v9.9.9",
+          String.raw`^https://github\.com/openclaw/proc-safe/\.github/workflows/release\.yml@refs/tags/v9\.9\.9$(?![\s\S])`,
         certificateIssuer: "https://token.actions.githubusercontent.com",
       },
     );
@@ -188,4 +189,23 @@ describe("npm registry verification", () => {
     expect(isRetryableRegistryError(new FatalRegistryError("fatal"))).toBe(false);
     expect(isRetryableRegistryError(new Error("unknown"))).toBe(false);
   });
+});
+
+const require = createRequire(import.meta.url);
+const sigstoreRequire = createRequire(require.resolve("sigstore"));
+const verifyRequire = createRequire(sigstoreRequire.resolve("@sigstore/verify"));
+const { verifySubjectAlternativeName } = verifyRequire("./policy.js");
+
+it("requires the exact certificate identity using Sigstore's real matcher", async () => {
+  const artifact = testArtifact();
+  const exact = "https://github.com/openclaw/proc-safe/.github/workflows/release.yml@refs/tags/v9.9.9";
+  for (const signer of [exact, exact.replace("v9.9.9", "v9x9x9"), exact + "0", exact + "\n", "prefix" + exact, exact.replace("github.com", "githubXcom")]) {
+    const fixture = registryFixture(artifact);
+    const verification = verifyPublishedPackageOnce(artifact, {
+      fetchImpl: fixture.fetchImpl,
+      verifyBundle: async (_bundle, policy) => verifySubjectAlternativeName(policy.certificateIdentityURI, signer),
+    });
+    if (signer === exact) await expect(verification).resolves.toMatchObject({ integrity: artifact.integrity });
+    else await expect(verification).rejects.toBeInstanceOf(FatalRegistryError);
+  }
 });
