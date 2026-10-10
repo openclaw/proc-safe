@@ -81,6 +81,7 @@ jobs:
           node_version="$(node --version)"
           curl --fail --location "https://nodejs.org/dist/${node_version}/node-${node_version}-darwin-x64.tar.gz" -o "$RUNNER_TEMP/node-x64.tar.gz"
           tar -xzf "$RUNNER_TEMP/node-x64.tar.gz" -C "$RUNNER_TEMP"
+          rustup target add x86_64-apple-darwin
           node scripts/build-native.mjs x86_64-apple-darwin
           arch -x86_64 "$RUNNER_TEMP/node-${node_version}-darwin-x64/bin/node" scripts/inspect-proof.mjs --rosetta
           # The Intel runtime lane owns the published x64 artifact.
