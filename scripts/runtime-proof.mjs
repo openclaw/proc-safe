@@ -29,6 +29,11 @@ assert.ok(self.startTimeMicros <= Date.now() * 1000);
 assert.ok(self.startTimeResolutionMicros > 0);
 assertSameIdentity(readProcessIdentity(process.pid), self);
 assert.equal(readProcessAncestry(process.pid, { maxDepth: 1 }).length, 1);
+// The default walk must complete for an unprivileged caller and never include PID 0/1.
+const fullAncestry = readProcessAncestry(process.pid);
+assert.ok(fullAncestry.length >= 1);
+assert.equal(fullAncestry[0].pid, process.pid);
+assert.ok(fullAncestry.every(identity => identity.pid > 1));
 
 const earliest = Date.now() * 1000;
 let childIdentity;

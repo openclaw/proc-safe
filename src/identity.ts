@@ -52,7 +52,8 @@ export function readProcessAncestry(pid: number, options?: { maxDepth?: number }
     }
     ancestry.push(current);
     seen.add(next);
-    if (next === 1 || current.parentPid === 0 || seen.has(current.parentPid)) break;
+    // Never read init/launchd as a parent: macOS denies proc_pidinfo on PID 1 to non-root callers.
+    if (current.parentPid <= 1 || seen.has(current.parentPid)) break;
     next = current.parentPid;
   }
   return ancestry;

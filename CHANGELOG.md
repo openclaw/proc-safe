@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `readProcessAncestry` stops before PID 1 instead of reading it, so default ancestry walks no longer throw `access-denied` for unprivileged callers on macOS, where `launchd` refuses `proc_pidinfo`.
+
 ## 0.1.0 - 2026-10-10
 
 First release.

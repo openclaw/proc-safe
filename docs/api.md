@@ -30,7 +30,7 @@ times otherwise. `exited` describes a zombie or a retained Windows process objec
 it does not erase the object's birth identity. `null` means no kernel object exists.
 
 PIDs must be positive integers representable by the OS. `maxDepth` is a positive safe
-integer, defaults to 32, and counts self. The walk stops at PID 0/1, a missing process,
+integer, defaults to 32, and counts self. The walk stops before PID 0 or 1 (never reading init/launchd), at a missing process,
 a cycle, or the depth limit. A parent born after its child is a reused PID and is excluded.
 Observations are fresh, including foreign processes. An identity is a snapshot, not a
 retained process handle. Permission failures throw, even partway through ancestry.
