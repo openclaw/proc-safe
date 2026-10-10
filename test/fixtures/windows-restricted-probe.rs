@@ -18,9 +18,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         System::{
             Console::{GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE},
             Threading::{
-                CREATE_NO_WINDOW, CREATE_SUSPENDED, CreateProcessAsUserW, GetCurrentProcess,
-                GetExitCodeProcess, OpenProcessToken, PROCESS_INFORMATION, ResumeThread,
-                STARTF_USESTDHANDLES, STARTUPINFOW, TerminateProcess, WaitForSingleObject,
+                CREATE_NO_WINDOW, CreateProcessAsUserW, GetCurrentProcess, GetExitCodeProcess,
+                OpenProcessToken, PROCESS_INFORMATION, STARTF_USESTDHANDLES, STARTUPINFOW,
+                TerminateProcess, WaitForSingleObject,
             },
         },
     };
@@ -137,12 +137,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::ptr::null(),
             std::ptr::null(),
             1,
-            CREATE_NO_WINDOW
-                | if deny_caller_token {
-                    CREATE_SUSPENDED
-                } else {
-                    0
-                },
+            CREATE_NO_WINDOW,
             std::ptr::null(),
             std::ptr::null(),
             &startup,
@@ -153,23 +148,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err(io::Error::last_os_error().into());
     }
     let handle = unsafe { OwnedHandle::from_raw_handle(process.hProcess) };
-    let thread = unsafe { OwnedHandle::from_raw_handle(process.hThread) };
+    let _thread = unsafe { OwnedHandle::from_raw_handle(process.hThread) };
+    let started = std::time::Instant::now();
     if deny_caller_token {
+        let directory = std::path::Path::new(&arguments[2]);
+        while !directory.join("ready").exists() {
+            if started.elapsed().as_millis() >= 30_000 {
+                unsafe {
+                    TerminateProcess(handle.as_raw_handle(), 1);
+                }
+                return Err("token denial probe did not initialize".into());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
         if let Err(error) = deny_token(handle.as_raw_handle()) {
             unsafe {
                 TerminateProcess(handle.as_raw_handle(), 1);
             }
             return Err(error.into());
         }
-        if unsafe { ResumeThread(thread.as_raw_handle()) } == u32::MAX {
-            let error = io::Error::last_os_error();
+        if let Err(error) = std::fs::write(directory.join("go"), b"go") {
             unsafe {
                 TerminateProcess(handle.as_raw_handle(), 1);
             }
             return Err(error.into());
         }
     }
-    if unsafe { WaitForSingleObject(handle.as_raw_handle(), 30_000) } != WAIT_OBJECT_0 {
+    let remaining_ms = 30_000u128.saturating_sub(started.elapsed().as_millis()) as u32;
+    if unsafe { WaitForSingleObject(handle.as_raw_handle(), remaining_ms) } != WAIT_OBJECT_0 {
         unsafe {
             TerminateProcess(handle.as_raw_handle(), 1);
         }

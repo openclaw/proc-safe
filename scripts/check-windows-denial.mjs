@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { readProcessIdentity } from "../dist/identity.js";
@@ -33,4 +36,7 @@ try {
 if (failures.length) throw new AggregateError(failures, "Windows denial proof failed");
 console.log("controlled process ACL denial verified on main and Worker");
 const tokenFixture = fileURLToPath(new URL(`../target/${hostNativeTarget().rust}/release/proc-safe-restricted-fixture.exe`, import.meta.url));
-execFileSync(tokenFixture, [process.execPath, fileURLToPath(new URL("./census-token-denial-proof.mjs", import.meta.url)), "0", "--deny-token"], { stdio: "inherit" });
+const tokenDirectory = mkdtempSync(join(tmpdir(), "proc-safe-token-denial-"));
+try {
+  execFileSync(tokenFixture, [process.execPath, fileURLToPath(new URL("./census-token-denial-proof.mjs", import.meta.url)), tokenDirectory, "--deny-token"], { stdio: "inherit" });
+} finally { rmSync(tokenDirectory, { recursive: true, force: true }); }
