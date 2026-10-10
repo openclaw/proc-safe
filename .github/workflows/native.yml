@@ -83,6 +83,8 @@ jobs:
           tar -xzf "$RUNNER_TEMP/node-x64.tar.gz" -C "$RUNNER_TEMP"
           node scripts/build-native.mjs x86_64-apple-darwin
           arch -x86_64 "$RUNNER_TEMP/node-${node_version}-darwin-x64/bin/node" scripts/inspect-proof.mjs --rosetta
+          # The Intel runtime lane owns the published x64 artifact.
+          rm native/proc-safe-native.darwin-x64.node
       - name: Real Windows permission denial
         if: runner.os == 'Windows'
         run: node scripts/check-windows-denial.mjs
