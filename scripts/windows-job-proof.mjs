@@ -144,7 +144,7 @@ async function operations() {
     assert.equal(observed.code, 0, observed.err.toString());
     const [value, count] = observed.out.toString().trim().split(" ");
     assert.equal(value, env ? "empty" : "yes");
-    if (env) assert.equal(Number(count), 0);
+    if (env) assert.equal(Number(count), 0, observed.out.toString());
     else assert.ok(Number(count) > 0);
     c.close();
   }
