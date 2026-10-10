@@ -57,9 +57,12 @@ async function probe(version, target) {
   assert.ok(Number.isSafeInteger(identity.startTimeMicros) && identity.startTimeMicros > 0);
   // Intentionally omit options: the first published release failed walking to launchd.
   const ancestry = modules["./identity"].readProcessAncestry(process.pid);
-  assert.ok(Array.isArray(ancestry) && ancestry.length > 0);
-  assert.equal(ancestry[0].pid, process.pid);
-  assert.ok(ancestry.every(entry => entry.pid > 1));
+  assert.ok(ancestry !== null);
+  assert.ok(Array.isArray(ancestry.chain) && ancestry.chain.length > 0);
+  assert.equal(ancestry.chain[0].pid, process.pid);
+  assert.ok(ancestry.chain.every(entry => entry.pid > 1));
+  assert.ok(ancestry.complete === true || ancestry.stoppedBy === "unreadable-parent",
+    "default ancestry must complete or explicitly report an unreadable parent");
   if (process.platform === "darwin") {
     const coalition = modules["./darwin"].readProcessCoalition(process.pid);
     assert.ok(coalition && typeof coalition.id === "bigint" && coalition.id > 0n);
@@ -102,7 +105,8 @@ async function probe(version, target) {
   }
   console.log(JSON.stringify({ runtime: process.versions.bun ? "bun" : "node", platform: process.platform,
     arch: process.arch, thread: isMainThread ? "main" : "worker", version, target,
-    imports: Object.keys(pkg.exports).length, ancestryDepth: ancestry.length, passed: true }));
+    imports: Object.keys(pkg.exports).length, ancestryDepth: ancestry.chain.length,
+    ancestryComplete: ancestry.complete, ancestryStoppedBy: ancestry.stoppedBy, passed: true }));
 }
 
 if (!isMainThread) {
