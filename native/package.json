@@ -4,7 +4,7 @@
   "description": "Private build workspace for the native bindings bundled by @openclaw/proc-safe.",
   "private": true,
   "license": "MIT",
-  "author": "OpenClaw Team <dev@openclaw.ai>",
+  "author": "OpenClaw Foundation (https://openclaw.org)",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/openclaw/proc-safe.git",

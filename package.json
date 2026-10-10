@@ -2,8 +2,21 @@
   "name": "@openclaw/proc-safe",
   "version": "0.1.0",
   "description": "Typed process identity, inspection, supervision, and service-manager primitives.",
+  "keywords": [
+    "process",
+    "pid",
+    "process-identity",
+    "windows-job",
+    "subreaper",
+    "systemd",
+    "native",
+    "openclaw",
+    "security",
+    "typescript"
+  ],
   "license": "MIT",
-  "author": "OpenClaw Team <dev@openclaw.ai>",
+  "author": "OpenClaw Foundation (https://openclaw.org)",
+  "homepage": "https://github.com/openclaw/proc-safe#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/openclaw/proc-safe.git"

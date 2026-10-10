@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "win32-x64-msvc native binding for @openclaw/proc-safe.",
   "license": "MIT",
-  "author": "OpenClaw Team <dev@openclaw.ai>",
+  "author": "OpenClaw Foundation (https://openclaw.org)",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/openclaw/proc-safe.git",

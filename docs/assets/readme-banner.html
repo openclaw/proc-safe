@@ -1,0 +1,103 @@
+<!doctype html>
+<!-- Source for readme-banner.jpg (1200x300). Render with headless Chrome at --window-size=1200,300 --force-device-scale-factor=2, then downscale to 1200x300 JPEG. -->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; width: 1200px; height: 300px; overflow: hidden; }
+  body {
+    position: relative;
+    background:
+      radial-gradient(900px 420px at 78% 40%, rgba(45, 212, 191, 0.07), transparent 60%),
+      linear-gradient(90deg, #070b12 0%, #0c121c 55%, #111a27 100%);
+    font-family: -apple-system, "SF Pro Display", "Helvetica Neue", Helvetica, sans-serif;
+    color: #fff;
+  }
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: linear-gradient(90deg, transparent 0%, #000 45%, #000 100%);
+  }
+  .brand { position: absolute; left: 64px; top: 90px; display: flex; align-items: center; gap: 26px; }
+  .brand img { width: 92px; height: 92px; filter: drop-shadow(0 10px 24px rgba(0,0,0,0.45)); }
+  h1 { margin: 0; font-size: 50px; font-weight: 700; letter-spacing: -0.5px; line-height: 1; }
+  p { margin: 18px 0 0; font-size: 21px; color: #c9d2de; letter-spacing: 0.1px; }
+  svg.art { position: absolute; right: 0; top: 0; }
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+
+  <!-- Right: a supervised process table + tree, in the fs-safe banner idiom -->
+  <svg class="art" width="560" height="300" viewBox="0 0 560 300" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#1b2433"/><stop offset="1" stop-color="#121a26"/>
+      </linearGradient>
+      <linearGradient id="fadeL" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#2dd4bf" stop-opacity="0"/><stop offset="1" stop-color="#2dd4bf" stop-opacity="0.7"/>
+      </linearGradient>
+      <linearGradient id="fadeC" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#f26f5c" stop-opacity="0"/><stop offset="1" stop-color="#f26f5c" stop-opacity="0.75"/>
+      </linearGradient>
+    </defs>
+
+    <!-- flowing signal lines -->
+    <path d="M0 225 C120 215 170 150 300 160 S470 120 560 95" stroke="url(#fadeL)" stroke-width="1.6" fill="none"/>
+    <path d="M0 250 C140 245 210 205 320 215 S480 200 560 175" stroke="url(#fadeC)" stroke-width="1.6" fill="none"/>
+
+    <!-- process panel -->
+    <rect x="150" y="-14" width="300" height="276" rx="16" fill="url(#panel)" stroke="rgba(255,255,255,0.10)"/>
+    <!-- header row: pid, ppid, start, state -->
+    <rect x="176" y="18" width="46" height="8" rx="4" fill="#3a4659"/>
+    <rect x="234" y="18" width="46" height="8" rx="4" fill="#3a4659"/>
+    <rect x="292" y="18" width="88" height="8" rx="4" fill="#3a4659"/>
+    <line x1="176" y1="40" x2="424" y2="40" stroke="rgba(255,255,255,0.07)"/>
+
+    <!-- rows with an indented tree gutter -->
+    <g stroke="#4b5a70" stroke-width="2" fill="none" stroke-linecap="round">
+      <path d="M186 66 V170"/><path d="M186 98 H200"/><path d="M186 130 H200"/><path d="M186 170 H200"/>
+      <path d="M210 176 V200 H222"/>
+    </g>
+    <circle cx="186" cy="62" r="7" fill="#0f1620" stroke="#2dd4bf" stroke-width="3"/>
+    <rect x="202" y="58" width="150" height="8" rx="4" fill="#526178"/>
+    <rect x="364" y="58" width="58" height="8" rx="4" fill="#2dd4bf"/>
+
+    <circle cx="206" cy="98" r="5" fill="#8a9ab0"/>
+    <rect x="218" y="94" width="120" height="8" rx="4" fill="#3d4a5e"/>
+    <rect x="364" y="94" width="40" height="8" rx="4" fill="#3d4a5e"/>
+
+    <circle cx="206" cy="130" r="5" fill="#8a9ab0"/>
+    <rect x="218" y="126" width="140" height="8" rx="4" fill="#3d4a5e"/>
+    <rect x="364" y="126" width="50" height="8" rx="4" fill="#3d4a5e"/>
+
+    <circle cx="228" cy="200" r="5" fill="#0f1620" stroke="#f26f5c" stroke-width="2.5"/>
+    <rect x="240" y="196" width="96" height="8" rx="4" fill="#3d4a5e"/>
+    <rect x="364" y="196" width="46" height="8" rx="4" fill="#f26f5c"/>
+
+    <circle cx="206" cy="170" r="5" fill="#8a9ab0"/>
+    <rect x="218" y="166" width="110" height="8" rx="4" fill="#3d4a5e"/>
+    <rect x="364" y="166" width="34" height="8" rx="4" fill="#3d4a5e"/>
+
+    <!-- job boundary chip -->
+    <rect x="176" y="226" width="248" height="22" rx="7" fill="none" stroke="rgba(45,212,191,0.35)" stroke-dasharray="4 5"/>
+
+    <!-- sparse dots -->
+    <circle cx="70" cy="60" r="2.5" fill="#2dd4bf" opacity="0.6"/>
+    <circle cx="520" cy="58" r="2.5" fill="#f26f5c" opacity="0.7"/>
+    <circle cx="500" cy="262" r="2.5" fill="#2dd4bf" opacity="0.6"/>
+    <circle cx="96" cy="276" r="2.5" fill="#8a9ab0" opacity="0.5"/>
+  </svg>
+
+  <div class="brand">
+    <img src="logo.svg" alt="">
+    <div>
+      <h1>proc-safe</h1>
+      <p>Race-resistant process primitives for Node.</p>
+    </div>
+  </div>
+</body>
+</html>

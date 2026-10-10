@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">proc-safe</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#253043"/>
+      <stop offset="1" stop-color="#121924"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.03"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.32" r="0.5">
+      <stop offset="0" stop-color="#2dd4bf" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#2dd4bf" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- App tile -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#tile)"/>
+  <rect x="17" y="17" width="478" height="478" rx="111" fill="none" stroke="url(#rim)" stroke-width="2"/>
+
+  <g transform="translate(0 16)">
+  <!-- Process tree: one pinned root, two children, one adopted grandchild -->
+  <g fill="none" stroke="#5b6b82" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256 170 V214 Q256 236 234 236 H186 Q164 236 164 258 V300"/>
+    <path d="M256 214 Q256 236 278 236 H326 Q348 236 348 258 V300"/>
+    <path d="M348 342 V372 Q348 392 328 392 H300"/>
+  </g>
+
+  <!-- Root: pinned identity (teal ring) -->
+  <circle cx="256" cy="140" r="78" fill="url(#glow)"/>
+  <circle cx="256" cy="140" r="42" fill="#0f1620" stroke="#2dd4bf" stroke-width="12"/>
+  <circle cx="256" cy="140" r="16" fill="#2dd4bf"/>
+
+  <!-- Children -->
+  <circle cx="164" cy="320" r="30" fill="#0f1620" stroke="#8a9ab0" stroke-width="10"/>
+  <circle cx="348" cy="320" r="30" fill="#0f1620" stroke="#8a9ab0" stroke-width="10"/>
+
+  <!-- Exited, still-owned grandchild (coral): identity kept, liveness gone -->
+  <circle cx="272" cy="392" r="24" fill="#0f1620" stroke="#f26f5c" stroke-width="10"/>
+  <circle cx="272" cy="392" r="8" fill="#f26f5c"/>
+  </g>
+</svg>
