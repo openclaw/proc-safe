@@ -1,6 +1,6 @@
 # @openclaw/proc-safe
 
-Typed process identity, command inspection, Darwin resource-coalition observations,
+Typed process identity, command inspection, Windows job ownership, Darwin resource-coalition observations,
 Linux child reaping, and page-cache diagnostics for Node.js 22+.
 Native bindings load on the first operation, never at import time. No runtime downloads,
 postinstall builds, shell fallback, or compression dependencies.
@@ -49,3 +49,6 @@ authenticated peer credentials; broker and machine routes make no peer identity 
 Property signatures infer their decoded value types, including `bigint` counters.
 User-manager ownership refusals expose the stable `peer-uid-mismatch` reason with
 the caller's and peer's effective UIDs in `ProcSafeError.details`.
+
+The [Windows job API](docs/windows-job.md) owns child processes and output pipes,
+admits children atomically, and transfers lifetime ownership without exposing raw handles.

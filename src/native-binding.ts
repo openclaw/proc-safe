@@ -13,6 +13,30 @@ export interface NativeSystemdBus {
   close(): Promise<void>;
 }
 
+export interface NativeJob {
+  assignCurrent(): void;
+  assign(process: NativePinnedProcess): void;
+  spawn(executable: string, commandLine: string, cwd: string | undefined, environment: string[] | undefined): NativeJobChild;
+  processIds(): number[];
+  accounting(): { activeProcesses: number; totalProcesses: number; terminatedProcesses: number };
+  terminate(exitCode: number): void;
+  retain(): void;
+  close(): void;
+}
+export interface NativeJobChild {
+  readonly pid: number;
+  readStdout(maxBytes: number): Buffer | null;
+  readStderr(maxBytes: number): Buffer | null;
+  exitCode(): number | null;
+  close(): void;
+}
+export interface NativePinnedProcess {
+  readonly identity: ProcessIdentity;
+  readonly imagePath: string;
+  bindLifetime(): void;
+  close(): void;
+}
+
 export interface NativeBinding {
   readProcessIdentity?(pid: number): ProcessIdentity | null;
   readProcessCoalition?(pid: number): DarwinCoalition | null;
@@ -40,4 +64,8 @@ export interface NativeBinding {
     identity?: ProcessIdentity;
     command?: NonNullable<ReturnType<NonNullable<NativeBinding["readProcessCommand"]>>>;
   }[];
+  createWindowsJob?(name: string | undefined, killOnJobClose: boolean): NativeJob;
+  openWindowsJob?(name: string): NativeJob | null;
+  openPinnedProcess?(pid: number, imagePath: string | undefined, startTimeMicros: number | undefined): NativePinnedProcess | null;
+  isCurrentProcessInJob?(): boolean;
 }

@@ -8,6 +8,19 @@ results; no sd-bus work or caller callbacks execute on the JavaScript thread.
 The common loader selects exactly one matching optional package. It captures the import-time
 async context so native registration does not retain the first operation's request scope.
 It caches load attempts, never starts child processes, and never downloads or compiles code.
+
+Windows jobs live in `windows_job.rs`. Native owners close job, process, and pipe handles;
+JavaScript never receives numeric handles. Child creation supplies both JOB_LIST and
+HANDLE_LIST to CreateProcessW, so admission precedes execution and only NUL stdin and
+the two output writers are inherited. Each pipe has one reader: a peek followed by a read
+bounded to the available bytes cannot wait for a writer. Root exit, pipe EOF, and job
+extinction are separate observations. Pinned processes reuse identity's handle-based reader.
+
+Lifetime binding duplicates a fresh non-inheritable kill-on-close job into a pinned live
+owner before assigning the caller, then releases the caller's handle. Failed admission
+closes the remote duplicate; an exited owner has already closed it. Retaining a current
+process job deliberately relinquishes native finalization, leaving its handle to OS process
+exit rather than Worker exit. [Windows job contracts](windows-job.md) describe both moves.
 Linux libc detection uses the process report, executable ELF interpreter, then conventional
 musl library names. Unknown libc attempts the GNU binding and fails explicitly if incompatible.
 

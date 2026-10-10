@@ -3,6 +3,11 @@
 See [systemd connections](systemd.md) for the Linux `./systemd` subpath, typed
 messages, connection ownership, and deadline and authentication contracts.
 
+See [Windows jobs](windows-job.md) for `@openclaw/proc-safe/windows-job`:
+`WindowsJob`, `WindowsJobChild`, `PinnedProcess`, `WindowsJobSpawnOptions`,
+`isCurrentProcessInJob`, `retainCurrentProcessJobUntilExit`,
+`bindCurrentProcessLifetimeTo`, and `isSupported`.
+
 `@openclaw/proc-safe/identity` exports:
 
 ```ts

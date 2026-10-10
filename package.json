@@ -47,6 +47,10 @@
       "types": "./dist/inspect.d.ts",
       "default": "./dist/inspect.js"
     },
+    "./windows-job": {
+      "types": "./dist/windows-job.d.ts",
+      "default": "./dist/windows-job.js"
+    },
     "./errors": {
       "types": "./dist/errors.d.ts",
       "default": "./dist/errors.js"

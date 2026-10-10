@@ -16,7 +16,7 @@ describe("public contracts", () => {
     const output = execFileSync(process.execPath, ["--input-type=module", "-e", `
       process.dlopen = () => { throw new Error('addon was loaded during import'); };
       process.env.PROC_SAFE_NATIVE = 'require';
-      for (const name of ['index', 'errors', 'identity', 'darwin', 'inspect', 'reaper', 'diagnostics', 'test-support', 'systemd']) await import('./dist/' + name + '.js');
+      for (const name of ['index', 'errors', 'identity', 'darwin', 'inspect', 'reaper', 'diagnostics', 'test-support', 'systemd', 'windows-job']) await import('./dist/' + name + '.js');
       console.log('lazy');
     `], { encoding: "utf8" });
     expect(output.trim()).toBe("lazy");
@@ -26,7 +26,10 @@ describe("public contracts", () => {
       const identity = await import('./dist/identity.js');
       const darwin = await import('./dist/darwin.js');
       const inspect = await import('./dist/inspect.js');
-      if (identity.isSupported() || darwin.isSupported() || inspect.isSupported()) throw new Error('off advertised support');
+      const jobs = await import('./dist/windows-job.js');
+      if (identity.isSupported() || darwin.isSupported() || inspect.isSupported() || jobs.isSupported()) throw new Error('off advertised support');
+      try { jobs.WindowsJob.create(); throw new Error('succeeded'); }
+      catch (e) { if (e.code !== 'helper-unavailable' && e.code !== 'unsupported-platform') throw e; }
       try { identity.readProcessIdentity(process.pid); throw new Error('succeeded'); }
       catch (e) { if (e.code !== 'helper-unavailable' && e.code !== 'unsupported-platform') throw e; }
       try { inspect.readProcessCommand(process.pid); throw new Error('succeeded'); }
