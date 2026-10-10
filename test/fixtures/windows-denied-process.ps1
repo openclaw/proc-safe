@@ -13,7 +13,7 @@ public static class ProcessAcl {
 '@
 $info = [System.Diagnostics.ProcessStartInfo]::new()
 $info.FileName = $NodePath
-$info.Arguments = '-e "setInterval(()=>{},1000); process.stdin.once(''data'',()=>process.exit(0)); console.log(''ready'')"'
+$info.Arguments = '-e "setInterval(()=>{},1000); process.stdin.on(''data'',data=>{if(data.toString().trim()===''exit'')process.exit(0)}); console.log(''ready'')"'
 $info.UseShellExecute = $false
 $info.CreateNoWindow = $true
 $info.RedirectStandardInput = $true
