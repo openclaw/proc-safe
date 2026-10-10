@@ -71,7 +71,7 @@ Every capability is its own subpath, so you only load what you use.
 | [`/test-support`](docs/test-support.md) | Test fixtures: seccomp group-kill denial, raw console-free spawns | Linux, Windows |
 | `/errors` | `ProcSafeError` and its codes | everywhere |
 
-Every subpath imports on every platform and exports `isSupported()`, which never throws.
+Every capability subpath imports on every platform and exports `isSupported()`, which never throws.
 Calling a capability where it doesn't exist throws `unsupported-platform` — no silent no-ops.
 
 ## Three outcomes, never guess
@@ -208,7 +208,7 @@ and in Workers, under Node 22 and 24 (and Bun where available):
 
 - **Name the capability, not the syscall.** No raw handles, pointers, or generic `call(symbol)` escape hatch.
 - **Fail closed.** Ambiguity throws; nothing guesses on your behalf.
-- **Own what you open.** Every native resource is an object with an idempotent `close()` and `Symbol.dispose`.
+- **Own what you open.** Every native resource is an object with an idempotent `close()` and `Symbol.dispose` (`Symbol.asyncDispose` and an async `close()` for systemd connections).
 - **No policy.** Budgets, retries, and fallbacks stay in your code; proc-safe reports facts and owns lifetimes.
 
 Report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
