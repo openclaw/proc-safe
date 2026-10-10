@@ -1,0 +1,7 @@
+import { copyFileSync, statSync } from "node:fs";
+import { nativeTargets, nativePackageDirectory } from "./native-targets.mjs";
+for (const target of nativeTargets) {
+  const source = new URL(`../artifacts/${target.artifact}`, import.meta.url);
+  if (statSync(source).size === 0) throw new Error(`${target.artifact} is empty`);
+  copyFileSync(source, new URL("proc-safe-native.node", nativePackageDirectory(target)));
+}

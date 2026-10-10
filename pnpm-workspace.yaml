@@ -1,0 +1,16 @@
+packages:
+  - native
+  - packages/*
+
+linkWorkspacePackages: true
+
+allowBuilds:
+  esbuild: true
+
+minimumReleaseAge: 2880
+
+# Reviewed upstream releases required by the dependency refresh.
+minimumReleaseAgeExclude:
+  - '@napi-rs/cli@3.10.8'
+  - '@types/node@26.6.5'
+  - 'vite@8.3.4'

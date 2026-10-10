@@ -1,0 +1,80 @@
+import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
+import { Worker } from "node:worker_threads";
+import { readProcessIdentity, readProcessAncestry, isSupported } from "../dist/identity.js";
+import * as darwin from "../dist/darwin.js";
+
+assert.equal(isSupported(), true, "this runtime lane requires working native identity");
+const self = readProcessIdentity(process.pid);
+assert.equal(self.pid, process.pid);
+assert.equal(self.parentPid, process.ppid);
+assert.ok(Number.isSafeInteger(self.startTimeMicros));
+assert.ok(self.startTimeMicros > Date.UTC(2020, 0, 1) * 1000);
+assert.ok(self.startTimeMicros <= Date.now() * 1000);
+assert.ok(self.startTimeResolutionMicros > 0);
+assert.deepEqual(readProcessIdentity(process.pid), self);
+assert.equal(readProcessAncestry(process.pid, { maxDepth: 1 }).length, 1);
+
+const earliest = Date.now() * 1000;
+const child = spawn(process.execPath, ["-e", "process.title = 'proc) test (name'; console.log('ready'); setInterval(() => {}, 1000)"], { stdio: ["ignore", "pipe", "inherit"] });
+try {
+  await once(child.stdout, "data");
+  const latest = Date.now() * 1000;
+  const identity = readProcessIdentity(child.pid);
+  assert.equal(identity.pid, child.pid);
+  assert.equal(identity.parentPid, process.pid);
+  // Linux btime is an integer second; it carries that documented epoch offset uncertainty.
+  const epochTolerance = process.platform === "linux" ? 1_000_000 : 1000;
+  assert.ok(identity.startTimeMicros >= earliest - epochTolerance);
+  assert.ok(identity.startTimeMicros <= latest + epochTolerance);
+  const ancestry = readProcessAncestry(child.pid, { maxDepth: 2 });
+  assert.deepEqual(ancestry.map(p => p.pid), [child.pid, process.pid]);
+  assert.ok(ancestry[1].startTimeMicros <= ancestry[0].startTimeMicros);
+} finally {
+  const exit = once(child, "exit");
+  child.kill();
+  await exit;
+}
+if (process.platform === "linux") {
+  const dir = mkdtempSync(join(tmpdir(), "proc-safe-name-"));
+  let raw;
+  try {
+    const executable = join(dir, "raw-name");
+    execFileSync("cc", [new URL("../test/fixtures/linux-process-name.c", import.meta.url).pathname, "-o", executable]);
+    raw = spawn(executable, [], { stdio: ["ignore", "pipe", "inherit"] });
+    await once(raw.stdout, "data");
+    const identity = readProcessIdentity(raw.pid);
+    assert.equal(identity.pid, raw.pid);
+    assert.equal(identity.parentPid, process.pid);
+    assert.ok(identity.startTimeMicros > self.startTimeMicros);
+  } finally {
+    if (raw) {
+      const exit = once(raw, "exit");
+      raw.kill();
+      await exit;
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+assert.equal(readProcessIdentity(child.pid), null);
+assert.deepEqual(readProcessAncestry(child.pid), []);
+
+const worker = new Worker(new URL("./worker-proof.mjs", import.meta.url));
+const workerExit = once(worker, "exit");
+const [result] = await once(worker, "message");
+assert.deepEqual(result.identity, self);
+if (process.platform === "darwin") {
+  const coalition = darwin.readProcessCoalition(process.pid);
+  assert.ok(coalition === null || typeof coalition.id === "bigint" && coalition.id > 0n);
+  assert.deepEqual(result.coalition, coalition);
+  assert.equal(darwin.readProcessCoalition(child.pid), null);
+} else {
+  assert.equal(darwin.isSupported(), false);
+  assert.throws(() => darwin.readProcessCoalition(process.pid), e => e.code === "unsupported-platform");
+}
+assert.deepEqual(await workerExit, [0]);
+console.log(JSON.stringify({ platform: process.platform, arch: process.arch, runtime: process.versions.bun ? "bun" : "node", passed: 6 }));

@@ -1,0 +1,32 @@
+{
+  "name": "@openclaw/proc-safe-linux-arm64-musl",
+  "version": "0.1.0",
+  "description": "linux-arm64-musl native binding for @openclaw/proc-safe.",
+  "license": "MIT",
+  "author": "OpenClaw Team <dev@openclaw.ai>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openclaw/proc-safe.git",
+    "directory": "packages/linux-arm64-musl"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "main": "proc-safe-native.node",
+  "files": [
+    "proc-safe-native.node"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "libc": [
+    "musl"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@openclaw/proc-safe-freebsd-arm64",
+  "version": "0.1.0",
+  "description": "freebsd-arm64 native binding for @openclaw/proc-safe.",
+  "license": "MIT",
+  "author": "OpenClaw Team <dev@openclaw.ai>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openclaw/proc-safe.git",
+    "directory": "packages/freebsd-arm64"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "os": [
+    "freebsd"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "main": "proc-safe-native.node",
+  "files": [
+    "proc-safe-native.node"
+  ],
+  "engines": {
+    "node": ">=22"
+  }
+}

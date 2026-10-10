@@ -1,0 +1,130 @@
+name: Release
+on:
+  push:
+    tags: ['v*.*.*']
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  validate:
+    name: Validate release source
+    if: github.ref_protected
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: 24
+      - run: git fetch --no-tags origin main
+      - run: node scripts/validate-release.mjs
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: cargo test --workspace --locked
+  prebuild:
+    needs: validate
+    uses: ./.github/workflows/native.yml
+  collect:
+    name: Assemble and validate release packages
+    needs: prebuild
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: binding-*
+          path: artifacts
+          merge-multiple: true
+      - run: node scripts/assemble-native-binaries.mjs
+      - run: pnpm package:collect
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: release-package
+          path: release-artifacts/*
+          if-no-files-found: error
+          retention-days: 7
+  draft-release:
+    name: Create draft GitHub Release
+    needs: collect
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node scripts/release-notes.mjs "${RELEASE_TAG#v}" > release-notes.md
+          if ! gh release view "$RELEASE_TAG" --json isDraft >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --verify-tag --draft --title "proc-safe ${RELEASE_TAG#v}" --notes-file release-notes.md
+          fi
+  publish:
+    name: Publish npm packages
+    needs: draft-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - run: npm install --global npm@12.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: release-package
+          path: release-artifacts
+      - run: node scripts/publish-release-packages.mjs release-artifacts
+  release:
+    name: Verify and promote GitHub Release
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: release-package
+          path: release-artifacts
+      - name: Verify registry bytes, signatures, and workflow provenance
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node scripts/release-notes.mjs "${RELEASE_TAG#v}" > release-notes.md
+          node scripts/append-release-proof.mjs release-notes.md release-artifacts/manifest.json "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: release-proof
+          path: release-notes.md
+          if-no-files-found: error
+      - name: Promote verified release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release edit "$RELEASE_TAG" --notes-file release-notes.md --draft=false
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = false

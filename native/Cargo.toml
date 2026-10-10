@@ -1,0 +1,24 @@
+[package]
+name = "proc-safe-native"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/openclaw/proc-safe"
+rust-version = "1.88"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { version = "3.14.2", default-features = false, features = ["dyn-symbols", "napi8"] }
+napi-derive = "3.6.12"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.190"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_Threading"] }
+
+[build-dependencies]
+napi-build = "2.6.0"

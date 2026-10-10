@@ -1,0 +1,87 @@
+{
+  "name": "@openclaw/proc-safe",
+  "version": "0.1.0",
+  "description": "Typed process identity, inspection, supervision, and service-manager primitives.",
+  "license": "MIT",
+  "author": "OpenClaw Team <dev@openclaw.ai>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openclaw/proc-safe.git"
+  },
+  "bugs": {
+    "url": "https://github.com/openclaw/proc-safe/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "docs/**/*.md",
+    "README.md",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./identity": {
+      "types": "./dist/identity.d.ts",
+      "default": "./dist/identity.js"
+    },
+    "./darwin": {
+      "types": "./dist/darwin.d.ts",
+      "default": "./dist/darwin.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "default": "./dist/errors.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "node scripts/lint.mjs",
+    "test": "vitest run",
+    "test:bun": "bun node_modules/vitest/vitest.mjs run",
+    "check": "pnpm lint && pnpm typecheck && pnpm build && pnpm test && pnpm pack:check",
+    "native:build": "pnpm --filter @openclaw/proc-safe-native-build build",
+    "native:test": "cargo test --workspace --locked",
+    "prepack": "pnpm build",
+    "pack:check": "node scripts/check-pack.mjs",
+    "package:smoke": "node scripts/check-release-packages.mjs --allow-host-only",
+    "package:collect": "node scripts/check-release-packages.mjs",
+    "release:notes": "node scripts/release-notes.mjs",
+    "benchmark:imports": "node scripts/benchmark-imports.mjs"
+  },
+  "optionalDependencies": {
+    "@openclaw/proc-safe-linux-x64-gnu": "0.1.0",
+    "@openclaw/proc-safe-linux-x64-musl": "0.1.0",
+    "@openclaw/proc-safe-linux-arm64-gnu": "0.1.0",
+    "@openclaw/proc-safe-linux-arm64-musl": "0.1.0",
+    "@openclaw/proc-safe-darwin-x64": "0.1.0",
+    "@openclaw/proc-safe-darwin-arm64": "0.1.0",
+    "@openclaw/proc-safe-win32-x64-msvc": "0.1.0",
+    "@openclaw/proc-safe-win32-arm64-msvc": "0.1.0",
+    "@openclaw/proc-safe-freebsd-x64": "0.1.0",
+    "@openclaw/proc-safe-freebsd-arm64": "0.1.0"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "3.10.8",
+    "@types/node": "^26.6.5",
+    "sigstore": "5.0.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@12.10.1"
+}

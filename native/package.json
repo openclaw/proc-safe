@@ -1,0 +1,32 @@
+{
+  "name": "@openclaw/proc-safe-native-build",
+  "version": "0.1.0",
+  "description": "Private build workspace for the native bindings bundled by @openclaw/proc-safe.",
+  "private": true,
+  "license": "MIT",
+  "author": "OpenClaw Team <dev@openclaw.ai>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openclaw/proc-safe.git",
+    "directory": "native"
+  },
+  "napi": {
+    "binaryName": "proc-safe-native",
+    "packageName": "@openclaw/proc-safe",
+    "targets": [
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl",
+      "aarch64-unknown-linux-gnu",
+      "aarch64-unknown-linux-musl",
+      "x86_64-apple-darwin",
+      "aarch64-apple-darwin",
+      "x86_64-pc-windows-msvc",
+      "aarch64-pc-windows-msvc",
+      "x86_64-unknown-freebsd",
+      "aarch64-unknown-freebsd"
+    ]
+  },
+  "scripts": {
+    "build": "node ../scripts/build-native.mjs"
+  }
+}
