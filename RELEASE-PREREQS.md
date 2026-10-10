@@ -32,6 +32,31 @@ consume that ceiling. Failure remains terminal; no timeout increase or weakened 
 Registry verification pins canonical tarball URLs and checks exact SHA-512 bytes, npm registry
 signatures, and Sigstore provenance bound to this repository, workflow, and version tag. Release
 proof includes npm version pages, tarballs, integrity, attestations, and the Actions run. Only
-successful verification promotes the draft. Confirm finalized changelog/release-body agreement,
+successful verification and installed-package smoke promote the draft. Confirm finalized changelog/release-body agreement,
 public release and annotated tag, dist-tags, publication times, and all eleven package records.
 Leave clean synchronized main and follow the repository's Unreleased convention.
+
+## Installed-package promotion gate
+
+After all eleven public packages are published and cryptographically verified, fresh consumer
+directories install the exact root version from `https://registry.npmjs.org`. This gate runs on
+macos-15 (ARM64), macos-15-intel, ubuntu-latest, ubuntu-24.04-arm, windows-latest, and
+windows-11-arm. Each runner checks its architecture and the exact matching native package,
+imports every exported subpath, and runs supported read-only calls with default optional
+settings on Node 24 and Bun, both on the main thread and in a Worker. It includes a full default
+ancestry walk, self command inspection, Darwin coalition, Windows census and process pin,
+Linux wait-state and temporary-file residency, plus every capability's `isSupported()`.
+Systemd is probed only with `isSupported()`; no service connection or process mutation is made.
+
+Run the same public-registry smoke locally with `node scripts/installed-smoke.mjs X.Y.Z --bun`
+(omit `--bun` for Node only). Installation uses an isolated cache and empty npm configuration.
+Only installation retries: five attempts, with 5/10/20/40-second backoff, a 30-second fetch
+timeout and a 120-second ceiling per attempt. A successful install's behavioral failure is
+terminal. Failure leaves the GitHub Release draft intact and never deletes or republishes a
+package. Re-run the failed gate after investigation; publication retries still verify existing
+versions rather than republish them.
+
+Native CI also runs this smoke against its local root and platform tarballs on every target:
+`node scripts/installed-smoke.mjs X.Y.Z --bun --tarballs root.tgz platform.tgz`.
+FreeBSD uses Node only, as in the existing runtime proof. Local tarballs install once, with no
+retry; the public release gate always uses the registry path.

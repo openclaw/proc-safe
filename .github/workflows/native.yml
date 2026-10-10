@@ -99,6 +99,9 @@ jobs:
         if: runner.os == 'Linux'
         run: node scripts/check-residency-denial.mjs
       - run: pnpm package:smoke
+      - name: Installed default-call smoke on Node and Bun
+        shell: bash
+        run: node scripts/installed-smoke.mjs "$(node -p 'require("./package.json").version')" --bun --tarballs release-artifacts/*.tgz
       - name: Separate Windows fault-injection addon (Node)
         if: runner.os == 'Windows'
         run: node scripts/check-windows-job-fault.mjs
@@ -154,6 +157,7 @@ jobs:
             curl -fL "https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-linux-${bun_arch}-musl.zip" -o /tmp/bun.zip
             unzip /tmp/bun.zip -d /tmp/bun
             cp /tmp/bun/*/bun /usr/local/bin/bun
+            node scripts/installed-smoke.mjs "$(node -p '\''require("./package.json").version'\'')" --bun --tarballs release-artifacts/*.tgz
             PROC_SAFE_NATIVE=require pnpm test:bun
             pnpm benchmark:imports
             bun scripts/benchmark-imports.mjs
@@ -201,6 +205,7 @@ jobs:
             node scripts/build-native.mjs
             PROC_SAFE_NATIVE=require node --test scripts/native-runtime.test.mjs
             node scripts/check-release-packages.mjs --allow-host-only --npm-only
+            node scripts/installed-smoke.mjs "$(node -p 'require("./package.json").version')" --tarballs release-artifacts/*.tgz
             node scripts/check-restricted-visibility.mjs
             node scripts/benchmark-imports.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
