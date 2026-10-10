@@ -60,6 +60,7 @@ try {
       import * as darwin from '@openclaw/proc-safe/darwin';
       import * as systemd from '@openclaw/proc-safe/systemd';
       import * as inspect from '@openclaw/proc-safe/inspect';
+      import * as windowsJobs from '@openclaw/proc-safe/windows-job';
       const require = createRequire(import.meta.url);
       assert.ok(isSupported());
       assert.equal(readProcessIdentity(process.pid).pid, process.pid);
@@ -69,8 +70,15 @@ try {
       if (process.platform !== 'linux') assert.equal(systemd.isSupported(), false);
       assert.equal(inspect.isSupported(), ['darwin', 'win32'].includes(process.platform));
       if (inspect.isSupported()) assert.ok(inspect.readProcessCommand(process.pid).argv.length > 0);
+      assert.equal(windowsJobs.isSupported(), process.platform === 'win32');
+      if (process.platform === 'win32') {
+        const job = windowsJobs.WindowsJob.create();
+        try { assert.deepEqual(job.processIds(), []); }
+        finally { job.close(); }
+      }
       const root = require.resolve('@openclaw/proc-safe/package.json');
       const fromRoot = createRequire(root);
+      assert.equal(Object.hasOwn(fromRoot(${JSON.stringify(host.package)}), 'failNextWindowsJobAssignment'), false);
       for (const name of ${JSON.stringify(nativeTargets.map(t => t.package))}) {
         if (name === ${JSON.stringify(host.package)}) assert.ok(fromRoot.resolve(name));
         else assert.throws(() => fromRoot.resolve(name));
@@ -84,7 +92,23 @@ try {
       assert.deepEqual(await exit, [0]);
     `;
     writeFileSync(join(cwd, "proof.mjs"), proof);
-    writeFileSync(join(cwd, "worker.mjs"), "import { parentPort } from 'node:worker_threads'; import { readProcessIdentity } from '@openclaw/proc-safe/identity'; import { SystemdBus, isSupported } from '@openclaw/proc-safe/systemd'; if (typeof SystemdBus.connectBroker !== 'function' || typeof isSupported() !== 'boolean') throw new Error('systemd import failed'); import * as inspect from '@openclaw/proc-safe/inspect'; if (inspect.isSupported() && !inspect.readProcessCommand(process.pid).argv.length) throw new Error('missing command'); parentPort.postMessage(readProcessIdentity(process.pid).pid);\n");
+    writeFileSync(join(cwd, "worker.mjs"), `
+      import assert from 'node:assert/strict';
+      import { parentPort } from 'node:worker_threads';
+      import { readProcessIdentity } from '@openclaw/proc-safe/identity';
+      import { SystemdBus, isSupported } from '@openclaw/proc-safe/systemd';
+      if (typeof SystemdBus.connectBroker !== 'function' || typeof isSupported() !== 'boolean') throw new Error('systemd import failed');
+      import * as inspect from '@openclaw/proc-safe/inspect';
+      if (inspect.isSupported() && !inspect.readProcessCommand(process.pid).argv.length) throw new Error('missing command');
+      import * as windowsJobs from '@openclaw/proc-safe/windows-job';
+      assert.equal(windowsJobs.isSupported(), process.platform === 'win32');
+      if (process.platform === 'win32') {
+        const job = windowsJobs.WindowsJob.create();
+        try { assert.deepEqual(job.processIds(), []); }
+        finally { job.close(); }
+      }
+      parentPort.postMessage(readProcessIdentity(process.pid).pid);
+    `);
     await run(process.execPath, ["proof.mjs"], { cwd, env: { ...env, PROC_SAFE_NATIVE: "require" }, timeout: 30_000 });
     console.log(`${manager} root-only install: native main + Worker + platform filtering passed`);
   }
