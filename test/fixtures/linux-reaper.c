@@ -10,7 +10,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-struct child_args { const char *fifo; int ready; int signal_exit; int code; };
+struct child_args { const char *fifo; int ready; int signal_number; int code; };
 
 static int child(void *value) {
     struct child_args *args = value;
@@ -23,9 +23,9 @@ static int child(void *value) {
     char command;
     if (read(gate, &command, 1) != 1 || command != 'e') _exit(92);
     close(gate);
-    if (args->signal_exit) {
-        signal(SIGTERM, SIG_DFL);
-        kill(getpid(), SIGTERM);
+    if (args->signal_number) {
+        signal(args->signal_number, SIG_DFL);
+        kill(getpid(), args->signal_number);
         _exit(93);
     }
     _exit(args->code);
@@ -38,8 +38,13 @@ int main(int argc, char **argv) {
     if (mkfifo(fifo, 0600) != 0) return 3;
     int ready[2];
     if (pipe(ready) != 0) return 4;
-    struct child_args args = { fifo, ready[1], !launch && strcmp(argv[2], "signal") == 0,
-        launch ? 42 : 23 };
+    int signal_number = 0;
+    if (!launch) {
+        if (strcmp(argv[2], "signal") == 0) signal_number = SIGTERM;
+        if (strcmp(argv[2], "rtmin") == 0) signal_number = SIGRTMIN;
+        if (strcmp(argv[2], "rtmax") == 0) signal_number = SIGRTMAX;
+    }
+    struct child_args args = { fifo, ready[1], signal_number, launch ? 42 : 23 };
     pid_t pid;
     if (launch) {
         // No exit signal: __WALL is required. Exec keeps this direct child
@@ -65,7 +70,7 @@ int main(int argc, char **argv) {
         waitpid(pid, NULL, __WALL);
         return 8;
     }
-    printf("%d\n", pid);
+    printf("%d %d\n", pid, signal_number);
     fflush(stdout);
     // The blocked grandchild is now adopted by the Node subreaper.
     return 0;

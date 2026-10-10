@@ -54,6 +54,7 @@ type ChildExit = {
   readonly pid: number;
   readonly exitCode: number | null;
   readonly signal: NodeJS.Signals | null;
+  readonly signalNumber: number | null;
 };
 function becomeChildSubreaper(): void;
 function isChildSubreaper(): boolean;

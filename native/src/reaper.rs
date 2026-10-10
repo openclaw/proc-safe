@@ -13,12 +13,13 @@ pub struct ChildExit {
     pub pid: u32,
     pub exit_code: Option<i32>,
     pub signal: Option<String>,
+    pub signal_number: Option<i32>,
 }
 
 enum Observation {
     None,
     Running,
-    Exited { pid: i32, signal: Option<i32> },
+    Exited { pid: i32 },
 }
 
 fn validate_pid(pid: i32) -> Result<()> {
@@ -60,54 +61,47 @@ fn observe(pid: Option<i32>) -> Result<Observation> {
     if observed < 0 || pid.is_some_and(|pid| pid != observed) {
         return Err(failure("layout-mismatch", "unexpected child wait PID"));
     }
-    let signal = match info.si_code {
-        libc::CLD_EXITED => None,
-        libc::CLD_KILLED | libc::CLD_DUMPED => Some(unsafe { info.si_status() }),
+    match info.si_code {
+        libc::CLD_EXITED | libc::CLD_KILLED | libc::CLD_DUMPED => {}
         _ => return Err(failure("layout-mismatch", "unexpected child wait state")),
-    };
-    Ok(Observation::Exited {
-        pid: observed,
-        signal,
-    })
+    }
+    Ok(Observation::Exited { pid: observed })
 }
 
-fn signal_name(signal: i32) -> Result<&'static str> {
+fn signal_name(signal: i32) -> Option<&'static str> {
     match signal {
-        libc::SIGHUP => Ok("SIGHUP"),
-        libc::SIGINT => Ok("SIGINT"),
-        libc::SIGQUIT => Ok("SIGQUIT"),
-        libc::SIGILL => Ok("SIGILL"),
-        libc::SIGTRAP => Ok("SIGTRAP"),
-        libc::SIGABRT => Ok("SIGABRT"),
-        libc::SIGBUS => Ok("SIGBUS"),
-        libc::SIGFPE => Ok("SIGFPE"),
-        libc::SIGKILL => Ok("SIGKILL"),
-        libc::SIGUSR1 => Ok("SIGUSR1"),
-        libc::SIGSEGV => Ok("SIGSEGV"),
-        libc::SIGUSR2 => Ok("SIGUSR2"),
-        libc::SIGPIPE => Ok("SIGPIPE"),
-        libc::SIGALRM => Ok("SIGALRM"),
-        libc::SIGTERM => Ok("SIGTERM"),
-        libc::SIGSTKFLT => Ok("SIGSTKFLT"),
-        libc::SIGCHLD => Ok("SIGCHLD"),
-        libc::SIGCONT => Ok("SIGCONT"),
-        libc::SIGSTOP => Ok("SIGSTOP"),
-        libc::SIGTSTP => Ok("SIGTSTP"),
-        libc::SIGTTIN => Ok("SIGTTIN"),
-        libc::SIGTTOU => Ok("SIGTTOU"),
-        libc::SIGURG => Ok("SIGURG"),
-        libc::SIGXCPU => Ok("SIGXCPU"),
-        libc::SIGXFSZ => Ok("SIGXFSZ"),
-        libc::SIGVTALRM => Ok("SIGVTALRM"),
-        libc::SIGPROF => Ok("SIGPROF"),
-        libc::SIGWINCH => Ok("SIGWINCH"),
-        libc::SIGIO => Ok("SIGIO"),
-        libc::SIGPWR => Ok("SIGPWR"),
-        libc::SIGSYS => Ok("SIGSYS"),
-        _ => Err(failure(
-            "layout-mismatch",
-            "exit signal is outside NodeJS.Signals",
-        )),
+        libc::SIGHUP => Some("SIGHUP"),
+        libc::SIGINT => Some("SIGINT"),
+        libc::SIGQUIT => Some("SIGQUIT"),
+        libc::SIGILL => Some("SIGILL"),
+        libc::SIGTRAP => Some("SIGTRAP"),
+        libc::SIGABRT => Some("SIGABRT"),
+        libc::SIGBUS => Some("SIGBUS"),
+        libc::SIGFPE => Some("SIGFPE"),
+        libc::SIGKILL => Some("SIGKILL"),
+        libc::SIGUSR1 => Some("SIGUSR1"),
+        libc::SIGSEGV => Some("SIGSEGV"),
+        libc::SIGUSR2 => Some("SIGUSR2"),
+        libc::SIGPIPE => Some("SIGPIPE"),
+        libc::SIGALRM => Some("SIGALRM"),
+        libc::SIGTERM => Some("SIGTERM"),
+        libc::SIGSTKFLT => Some("SIGSTKFLT"),
+        libc::SIGCHLD => Some("SIGCHLD"),
+        libc::SIGCONT => Some("SIGCONT"),
+        libc::SIGSTOP => Some("SIGSTOP"),
+        libc::SIGTSTP => Some("SIGTSTP"),
+        libc::SIGTTIN => Some("SIGTTIN"),
+        libc::SIGTTOU => Some("SIGTTOU"),
+        libc::SIGURG => Some("SIGURG"),
+        libc::SIGXCPU => Some("SIGXCPU"),
+        libc::SIGXFSZ => Some("SIGXFSZ"),
+        libc::SIGVTALRM => Some("SIGVTALRM"),
+        libc::SIGPROF => Some("SIGPROF"),
+        libc::SIGWINCH => Some("SIGWINCH"),
+        libc::SIGIO => Some("SIGIO"),
+        libc::SIGPWR => Some("SIGPWR"),
+        libc::SIGSYS => Some("SIGSYS"),
+        _ => None,
     }
 }
 
@@ -148,18 +142,6 @@ pub fn inspect_child_wait_state(pid: Option<i32>) -> Result<ChildWaitState> {
 #[napi]
 pub fn reap_child(pid: i32) -> Result<Option<ChildExit>> {
     validate_pid(pid)?;
-    // Reject unrepresentable real-time signals before consuming their status.
-    match observe(Some(pid))? {
-        Observation::None => return Err(failure("operation-failed", "not-a-child")),
-        Observation::Running => return Ok(None),
-        Observation::Exited {
-            signal: Some(signal),
-            ..
-        } => {
-            signal_name(signal)?;
-        }
-        Observation::Exited { signal: None, .. } => {}
-    }
     let mut status = 0_i32;
     let result = unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG | libc::__WALL) };
     if result == 0 {
@@ -176,10 +158,11 @@ pub fn reap_child(pid: i32) -> Result<Option<ChildExit>> {
     if result != pid {
         return Err(failure("layout-mismatch", "unexpected reaped PID"));
     }
-    let (exit_code, signal) = if libc::WIFEXITED(status) {
-        (Some(libc::WEXITSTATUS(status)), None)
+    let (exit_code, signal, signal_number) = if libc::WIFEXITED(status) {
+        (Some(libc::WEXITSTATUS(status)), None, None)
     } else if libc::WIFSIGNALED(status) {
-        (None, Some(signal_name(libc::WTERMSIG(status))?.into()))
+        let number = libc::WTERMSIG(status);
+        (None, signal_name(number).map(str::to_owned), Some(number))
     } else {
         return Err(failure("layout-mismatch", "unexpected reaped status"));
     };
@@ -187,5 +170,6 @@ pub fn reap_child(pid: i32) -> Result<Option<ChildExit>> {
         pid: pid as u32,
         exit_code,
         signal,
+        signal_number,
     }))
 }

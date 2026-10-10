@@ -111,8 +111,8 @@ async function proveAll({ fixture, wallPid, wallFifo }) {
   assert.equal(isChildSubreaper(), true);
   const directory = mkdtempSync(join(tmpdir(), "proc-safe-reaper-owner-"));
   try {
-    await proveChild(wallPid, wallFifo, { exitCode: 42, signal: null }, directory);
-    for (const mode of ["exit", "signal"]) {
+    await proveChild(wallPid, wallFifo, { exitCode: 42, signal: null, signalNumber: null }, directory);
+    for (const mode of ["exit", "signal", "rtmin", "rtmax"]) {
       const subdirectory = join(directory, mode);
       // A separate directory gives each libuv child an untouched exit marker.
       const { mkdirSync } = await import("node:fs");
@@ -123,13 +123,20 @@ async function proveAll({ fixture, wallPid, wallFifo }) {
       let text = "";
       root.stdout.on("data", chunk => { text += chunk; });
       assert.deepEqual(await rootClosed, [0, null]);
-      const pid = Number(text.trim());
+      const [pid, signalNumber] = text.trim().split(/\s+/u).map(Number);
       assert.ok(Number.isInteger(pid) && pid > 0);
-      await proveChild(pid, fifo, mode === "signal"
-        ? { exitCode: null, signal: "SIGTERM" } : { exitCode: 23, signal: null }, subdirectory);
+      assert.ok(Number.isInteger(signalNumber));
+      if (mode === "signal") assert.equal(signalNumber, 15);
+      if (mode === "rtmin" || mode === "rtmax") {
+        assert.ok(signalNumber >= 34 && signalNumber <= 64);
+        if (mode === "rtmax") assert.equal(signalNumber, 64);
+      }
+      await proveChild(pid, fifo, mode === "exit"
+        ? { exitCode: 23, signal: null, signalNumber: null }
+        : { exitCode: null, signal: mode === "signal" ? "SIGTERM" : null, signalNumber }, subdirectory);
     }
     assertNoChildren();
-    return { scenarios: 3 };
+    return { scenarios: 5 };
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
 
@@ -158,8 +165,8 @@ if (!isMainThread) {
       const result = execFileSync(fixture, ["--launch", join(directory, `${context}.fifo`),
         process.execPath, fileURLToPath(new URL(import.meta.url)), context, fixture],
       { encoding: "utf8", timeout: 10000 });
-      assert.deepEqual(JSON.parse(result), { scenarios: 3 });
+      assert.deepEqual(JSON.parse(result), { scenarios: 5 });
     }
-    console.log(JSON.stringify({ platform: process.platform, arch: process.arch, contexts: 2, scenarios: 6 }));
+    console.log(JSON.stringify({ platform: process.platform, arch: process.arch, contexts: 2, scenarios: 10 }));
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }

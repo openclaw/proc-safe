@@ -41,10 +41,14 @@ There is no reap-any-child operation.
 
 `reapChild(pid)` uses nonblocking `waitpid` with `__WALL` for exactly one positive PID.
 It returns `null` while that child has no exit status, or a frozen
-`{ pid, exitCode, signal }` with one of `exitCode` and `signal` null. `ECHILD` throws
+`{ pid, exitCode, signal, signalNumber }`. Normal exits have an `exitCode` and null
+signal fields. Signal exits always have a numeric `signalNumber` and null `exitCode`;
+`signal` is the Node signal name when one exists, otherwise null. Linux real-time
+signals are reaped normally and retain their numeric signal without a Node name.
+`ECHILD` throws
 `ProcSafeError` with code `operation-failed` and `details: { reason: 'not-a-child' }`.
-That includes reaping an already-reaped PID. Exit signals outside `NodeJS.Signals`
-(Linux real-time signals) throw `layout-mismatch` before consuming the status.
+That includes reaping an already-reaped PID. A missing Node signal name never
+prevents a requested exited child from being reaped.
 
 All PIDs must be positive platform integers; zero and negative group selectors are
 rejected. Linux GNU/musl x64 and arm64 are supported. Imports remain lazy everywhere;

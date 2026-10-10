@@ -11,6 +11,7 @@ export type ChildExit = {
   readonly pid: number;
   readonly exitCode: number | null;
   readonly signal: NodeJS.Signals | null;
+  readonly signalNumber: number | null;
 };
 
 function binding() {
@@ -51,6 +52,7 @@ export function reapChild(pid: number): ChildExit | null {
     const result = binding().reapChild(pid);
     return result === null ? null : Object.freeze({
       pid: result.pid, exitCode: result.exitCode ?? null, signal: result.signal ?? null,
+      signalNumber: result.signalNumber ?? null,
     });
   } catch (error) { throw fromNativeError(error); }
 }

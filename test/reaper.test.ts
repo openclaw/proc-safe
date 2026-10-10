@@ -43,5 +43,5 @@ test.runIf(process.platform === "linux" && process.env.PROC_SAFE_NATIVE === "req
     // test runner, run this ownership proof with Node rather than claiming Bun support.
     const result = execFileSync(process.versions.bun ? "node" : process.execPath,
       ["scripts/reaper-proof.mjs"], { encoding: "utf8", timeout: 10000 });
-    expect(JSON.parse(result)).toEqual({ platform: "linux", arch: process.arch, contexts: 2, scenarios: 6 });
+    expect(JSON.parse(result)).toEqual({ platform: "linux", arch: process.arch, contexts: 2, scenarios: 10 });
   });
