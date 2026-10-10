@@ -136,19 +136,6 @@ async function operations() {
   assert.deepEqual(job.processIds(), []);
   child.close(); child.close(); pin.close();
   assert.throws(() => child.readStdout(1), e => e.code === "invalid-argument");
-  for (const env of [undefined, {}]) {
-    process.env.PROC_SAFE_JOB_INHERIT = "yes";
-    // The fixture observes the actual environment without Node's SystemRoot requirement.
-    const c = job.spawn({ executable: fixture, commandLine: [fixture, "environment"].map(quote).join(" "), env });
-    const observed = await drain(c);
-    assert.equal(observed.code, 0, observed.err.toString());
-    const [value, count] = observed.out.toString().trim().split(" ");
-    assert.equal(value, env ? "empty" : "yes");
-    if (env) assert.equal(Number(count), 0, observed.out.toString());
-    else assert.ok(Number(count) > 0);
-    c.close();
-  }
-  delete process.env.PROC_SAFE_JOB_INHERIT;
   const waiting = launch(job, "setInterval(()=>{},1000)");
   assert.equal(waiting.exitCode(), null);
   assert.equal(waiting.readStdout(20).length, 0);
@@ -194,6 +181,25 @@ async function operations() {
     await until(() => descendant.identity.exited);
     descendant.close(); root.close();
   } finally { rmSync(dir, { recursive: true, force: true }); }
+}
+
+async function environments() {
+  const job = WindowsJob.create();
+  try {
+    for (const env of [undefined, {}]) {
+      process.env.PROC_SAFE_JOB_INHERIT = "yes";
+      // The fixture observes the actual environment without Node's SystemRoot requirement.
+      const c = job.spawn({ executable: fixture, commandLine: [fixture, "environment"].map(quote).join(" "), env });
+      try {
+        const observed = await drain(c);
+        assert.equal(observed.code, 0, observed.err.toString());
+        const [value, count] = observed.out.toString().trim().split(" ");
+        assert.equal(value, env ? "empty" : "yes");
+        if (env) assert.equal(Number(count), 0, observed.out.toString());
+        else assert.ok(Number(count) > 0);
+      } finally { c.close(); }
+    }
+  } finally { delete process.env.PROC_SAFE_JOB_INHERIT; job.close(); }
 }
 
 async function lifetimes(worker) {
@@ -269,6 +275,14 @@ if (isMainThread && process.argv[3] === "worker") {
 } else if (mode === "operations") {
   await operations();
   parentPort?.postMessage("passed");
+} else if (mode === "environments") {
+  await environments();
+  if (isMainThread) {
+    const worker = new Worker(new URL(import.meta.url), { argv: ["environments"] });
+    const exited = once(worker, "exit");
+    await once(worker, "message"); await exited;
+    console.log(JSON.stringify({ environments: 2 }));
+  } else { parentPort.postMessage("passed"); }
 } else {
   await operations();
   const worker = new Worker(new URL(import.meta.url), { argv: ["operations"] });

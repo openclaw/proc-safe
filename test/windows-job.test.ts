@@ -22,3 +22,8 @@ test.runIf(process.platform === "win32" && process.env.PROC_SAFE_NATIVE === "req
   const output = execFileSync(process.execPath, ["scripts/windows-job-proof.mjs"], { encoding: "utf8", timeout: 60_000 });
   expect(JSON.parse(output)).toMatchObject({ platform: "win32", arch: process.arch, passed: 2, lifetimes: 2 });
 }, 65_000);
+
+test.runIf(process.platform === "win32" && process.env.PROC_SAFE_NATIVE === "require")("real Windows environment replacement on main thread and Worker", () => {
+  const output = execFileSync(process.execPath, ["scripts/windows-job-proof.mjs", "environments"], { encoding: "utf8", timeout: 60_000 });
+  expect(JSON.parse(output)).toEqual({ environments: 2 });
+}, 65_000);
