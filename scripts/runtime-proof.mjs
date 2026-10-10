@@ -35,9 +35,10 @@ try {
   assert.deepEqual(ancestry.map(p => p.pid), [child.pid, process.pid]);
   assert.ok(ancestry[1].startTimeMicros <= ancestry[0].startTimeMicros);
 } finally {
-  const exit = once(child, "exit");
+  // exit announces termination; close also releases Node's retained handles.
+  const closed = once(child, "close");
   child.kill();
-  await exit;
+  await closed;
 }
 if (process.platform === "linux") {
   const dir = mkdtempSync(join(tmpdir(), "proc-safe-name-"));
@@ -53,9 +54,9 @@ if (process.platform === "linux") {
     assert.ok(identity.startTimeMicros > self.startTimeMicros);
   } finally {
     if (raw) {
-      const exit = once(raw, "exit");
+      const closed = once(raw, "close");
       raw.kill();
-      await exit;
+      await closed;
     }
     rmSync(dir, { recursive: true, force: true });
   }

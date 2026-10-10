@@ -86,7 +86,9 @@ jobs:
           EXPECTED_ARCH: ${{ matrix.arch }}
         run: |
           docker run --rm -e EXPECTED_ARCH -v "$PWD:/work" -w /work "node:${NODE_MAJOR}-alpine" sh -euxc '
-            apk add --no-cache cargo rust build-base curl unzip bash
+            apk add --no-cache build-base curl unzip bash
+            curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+            export PATH="$HOME/.cargo/bin:$PATH"
             npm install --global pnpm@12.10.1
             node -e "if(process.arch !== process.env.EXPECTED_ARCH) throw new Error(\"wrong runner\")"
             pnpm install --frozen-lockfile
