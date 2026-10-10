@@ -125,6 +125,24 @@ mod macos {
         if size != size_of::<i32>() || !(5..=16 * 1024 * 1024).contains(&arg_max) {
             return Err(failure("layout-mismatch", "invalid Darwin argument limit"));
         }
+        let mut required = 0;
+        if let Err(error) = sysctl(
+            &mut [libc::CTL_KERN, libc::KERN_PROCARGS2, pid as i32],
+            std::ptr::null_mut(),
+            &mut required,
+        ) {
+            if crate::identity::read_process_identity(pid)?.is_none() {
+                return Ok(None);
+            }
+            return Err(error);
+        }
+        // XNU's full image includes executable/Apple strings outside ARG_MAX's argv budget.
+        if required < 5 || required >= arg_max as usize {
+            return Err(failure(
+                "incomplete",
+                "Darwin argument image exceeds bounded read",
+            ));
+        }
         let mut bytes = vec![0u8; arg_max as usize];
         size = bytes.len();
         if let Err(error) = sysctl(
