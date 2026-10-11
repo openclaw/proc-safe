@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - 2026-10-10
 
 - **Breaking:** `readProcessAncestry` now returns a self-first `{ chain, complete, stoppedBy }` snapshot or `null` for a provably gone start, instead of an array; unreadable parents preserve an incomplete chain, `throughPid` stops inclusively, and starting PIDs ≤1 throw `invalid-argument` with `details.reason: "init-process"` before any native read (`readProcessIdentity(1)` is unchanged).
+- Fixed default ancestry walks on macOS: `readProcessAncestry` no longer reads launchd (PID 1), which macOS denies to non-root callers, so walks from ordinary processes stop cleanly instead of throwing `access-denied`.
 
 ## 0.1.0 - 2026-10-10
 
