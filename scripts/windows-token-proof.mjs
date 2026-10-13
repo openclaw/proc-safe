@@ -75,9 +75,13 @@ if (!isMainThread) {
   console.log(JSON.stringify(await both("disabled")));
 } else {
   const outside = await both("outside", null);
-  execFileSync(process.execPath, [fileURLToPath(new URL(import.meta.url)), "--disabled"], {
-    env: { ...process.env, PROC_SAFE_NATIVE: "off" }, timeout: 10_000,
-  });
+  const previousMode = process.env.PROC_SAFE_NATIVE;
+  process.env.PROC_SAFE_NATIVE = "off";
+  try { await both("disabled"); }
+  finally {
+    if (previousMode === undefined) delete process.env.PROC_SAFE_NATIVE;
+    else process.env.PROC_SAFE_NATIVE = previousMode;
+  }
   let contained;
   if (process.platform === "win32") {
     const target = hostNativeTarget();
@@ -86,7 +90,11 @@ if (!isMainThread) {
     try {
       const runtime = join(directory, "runtime.exe");
       copyFileSync(process.execPath, runtime);
-      cpSync(new URL("../dist", import.meta.url), join(directory, "dist"), { recursive: true });
+      const dist = join(directory, "dist");
+      mkdirSync(dist);
+      for (const name of ["windows-token", "native", "native-error", "native-load-error", "errors"]) {
+        copyFileSync(new URL(`../dist/${name}.js`, import.meta.url), join(dist, `${name}.js`));
+      }
       cpSync(new URL("../package.json", import.meta.url), join(directory, "package.json"));
       const scripts = join(directory, "scripts");
       mkdirSync(scripts);

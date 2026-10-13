@@ -35,7 +35,7 @@ to reject a piped child spawn when its runtime's libuv lacks AppContainer suppor
 The package does not start a child, change the token, or enforce that policy.
 
 CI creates a disposable AppContainer profile and launches an isolated copy of
-the runtime/package with `SECURITY_CAPABILITIES`. Main-thread and Worker queries
+the runtime and capability import closure with `SECURITY_CAPABILITIES`. Main-thread and Worker queries
 must equal the profile SID; outside queries must return `null`. A separate real
 token-denial fixture verifies typed failures. Windows x64 and ARM64 run both Node
 and Bun proofs. Test profiles and directories are removed afterward.
