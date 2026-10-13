@@ -12,15 +12,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ptr::{null, null_mut},
     };
     use windows_sys::Win32::{
-        Foundation::{ERROR_INSUFFICIENT_BUFFER, GetLastError, LocalFree, WAIT_OBJECT_0},
+        Foundation::{
+            ERROR_INSUFFICIENT_BUFFER, GetLastError, INVALID_HANDLE_VALUE, LocalFree, WAIT_OBJECT_0,
+        },
         Security::{
             Authorization::*,
             DACL_SECURITY_INFORMATION, FreeSid, GetSecurityDescriptorSacl,
             Isolation::{CreateAppContainerProfile, DeleteAppContainerProfile},
-            LABEL_SECURITY_INFORMATION, PSID, SECURITY_CAPABILITIES,
+            LABEL_SECURITY_INFORMATION, PSID, SECURITY_ATTRIBUTES, SECURITY_CAPABILITIES,
             SUB_CONTAINERS_AND_OBJECTS_INHERIT,
         },
-        Storage::FileSystem::FILE_ALL_ACCESS,
+        Storage::FileSystem::{
+            CREATE_ALWAYS, CreateFileW, FILE_ALL_ACCESS, FILE_ATTRIBUTE_NORMAL, FILE_GENERIC_READ,
+            FILE_GENERIC_WRITE, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+        },
         System::Threading::*,
     };
     struct LocalMemory(*mut c_void);
@@ -229,14 +234,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         let expected = String::from_utf16(unsafe { std::slice::from_raw_parts(text, length) })?;
         let mut bytes = 0;
-        if unsafe { InitializeProcThreadAttributeList(null_mut(), 1, 0, &mut bytes) } != 0
+        if unsafe { InitializeProcThreadAttributeList(null_mut(), 2, 0, &mut bytes) } != 0
             || unsafe { GetLastError() } != ERROR_INSUFFICIENT_BUFFER
         {
             return Err(io::Error::last_os_error().into());
         }
         let mut storage = vec![0usize; bytes.div_ceil(size_of::<usize>())];
         if unsafe {
-            InitializeProcThreadAttributeList(storage.as_mut_ptr().cast(), 1, 0, &mut bytes)
+            InitializeProcThreadAttributeList(storage.as_mut_ptr().cast(), 2, 0, &mut bytes)
         } == 0
         {
             return Err(io::Error::last_os_error().into());
@@ -251,6 +256,56 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES as usize,
                 (&mut capabilities as *mut SECURITY_CAPABILITIES).cast(),
                 size_of::<SECURITY_CAPABILITIES>(),
+                null_mut(),
+                null(),
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error().into());
+        }
+        let security = SECURITY_ATTRIBUTES {
+            nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: null_mut(),
+            bInheritHandle: 1,
+        };
+        let log = unsafe {
+            CreateFileW(
+                wide(&Path::new(&args[2]).join("child.log")).as_ptr(),
+                FILE_GENERIC_WRITE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                &security,
+                CREATE_ALWAYS,
+                FILE_ATTRIBUTE_NORMAL,
+                null_mut(),
+            )
+        };
+        if log == INVALID_HANDLE_VALUE {
+            return Err(io::Error::last_os_error().into());
+        }
+        let log = unsafe { OwnedHandle::from_raw_handle(log) };
+        let input = unsafe {
+            CreateFileW(
+                wide(Path::new("NUL")).as_ptr(),
+                FILE_GENERIC_READ,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                &security,
+                OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL,
+                null_mut(),
+            )
+        };
+        if input == INVALID_HANDLE_VALUE {
+            return Err(io::Error::last_os_error().into());
+        }
+        let input = unsafe { OwnedHandle::from_raw_handle(input) };
+        let mut inherited = [log.as_raw_handle(), input.as_raw_handle()];
+        if unsafe {
+            UpdateProcThreadAttribute(
+                attributes.0.as_mut_ptr().cast(),
+                0,
+                PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
+                inherited.as_mut_ptr().cast(),
+                size_of_val(&inherited),
                 null_mut(),
                 null(),
             )
@@ -276,6 +331,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut startup: STARTUPINFOEXW = unsafe { zeroed() };
         startup.StartupInfo.cb = size_of::<STARTUPINFOEXW>() as u32;
         startup.lpAttributeList = attributes.0.as_mut_ptr().cast();
+        startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+        startup.StartupInfo.hStdInput = input.as_raw_handle();
+        startup.StartupInfo.hStdOutput = log.as_raw_handle();
+        startup.StartupInfo.hStdError = log.as_raw_handle();
         let mut process: PROCESS_INFORMATION = unsafe { zeroed() };
         if unsafe {
             CreateProcessW(
@@ -283,7 +342,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 command.as_mut_ptr(),
                 null(),
                 null(),
-                0,
+                1,
                 EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW,
                 null(),
                 cwd.as_ptr(),

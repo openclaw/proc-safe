@@ -100,9 +100,12 @@ if (!isMainThread) {
           encoding: "utf8", timeout: 35_000,
         }).trim();
       } catch (error) {
-        const detail = join(directory, "error.txt");
-        if (existsSync(detail)) error.message += `\nAppContainer child: ${readFileSync(detail, "utf8")}`;
-        throw error;
+        const details = [];
+        for (const name of ["error.txt", "child.log"]) {
+          const detail = join(directory, name);
+          if (existsSync(detail)) details.push(`${name}: ${readFileSync(detail, "utf8")}`);
+        }
+        throw new Error(`AppContainer proof failed\n${details.join("\n")}`, { cause: error });
       }
       assert.match(expected, /^S-1-15-2-/);
       contained = JSON.parse(readFileSync(join(directory, "result.json"), "utf8"));
