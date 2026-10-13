@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add `windows-token` AppContainer SID inspection, with explicit errors when token state cannot be determined. Thanks @jonathanlindsay for the AppContainer detection idea.
+
 - Add async `getProcSafeNativeStatus()` for runtime health checks with optional probing, path-free load reasons, and actionable guidance.
 
 ## 0.2.0 - 2026-10-10

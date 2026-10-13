@@ -80,6 +80,10 @@
     "./reaper": {
       "types": "./dist/reaper.d.ts",
       "default": "./dist/reaper.js"
+    },
+    "./windows-token": {
+      "types": "./dist/windows-token.d.ts",
+      "default": "./dist/windows-token.js"
     }
   },
   "scripts": {

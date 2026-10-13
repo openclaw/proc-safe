@@ -9,7 +9,7 @@ const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const raw = JSON.parse(execFileSync(process.execPath, [resolveNpmCli(), "pack", "--dry-run", "--json", "--ignore-scripts"], { encoding: "utf8" }));
 const packed = normalizePackResult(raw, pkg.name);
 const files = packed.files.map(f => f.path);
-for (const subpath of ["identity", "darwin", "inspect", "reaper", "diagnostics", "test-support", "systemd", "windows-job", "index", "errors"]) {
+for (const subpath of ["identity", "darwin", "inspect", "reaper", "diagnostics", "test-support", "systemd", "windows-job", "windows-token", "index", "errors"]) {
   assert.ok(files.includes(`dist/${subpath}.js`));
   assert.ok(files.includes(`dist/${subpath}.d.ts`));
 }

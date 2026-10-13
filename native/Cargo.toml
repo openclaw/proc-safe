@@ -22,7 +22,7 @@ napi-derive = "3.6.12"
 libc = "0.2.190"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_System_Console", "Win32_Security", "Win32_System_Diagnostics_Debug", "Win32_System_Memory", "Win32_UI_Shell", "Win32_System_ProcessStatus", "Win32_Globalization", "Win32_System_JobObjects", "Win32_System_Pipes", "Win32_Storage_FileSystem", "Win32_System_IO"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_System_Console", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Isolation", "Win32_System_Diagnostics_Debug", "Win32_System_Memory", "Win32_UI_Shell", "Win32_System_ProcessStatus", "Win32_Globalization", "Win32_System_JobObjects", "Win32_System_Pipes", "Win32_Storage_FileSystem", "Win32_System_IO"] }
 
 [build-dependencies]
 cc = "1.7.0"
@@ -43,3 +43,7 @@ path = "../test/fixtures/inspect-child.rs"
 [[bin]]
 name = "proc-safe-job-fixture"
 path = "../test/fixtures/windows-job.rs"
+
+[[bin]]
+name = "proc-safe-appcontainer-fixture"
+path = "../test/fixtures/windows-appcontainer.rs"

@@ -3,6 +3,7 @@ import { closeSync, openSync, readSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { ProcSafeError } from "./errors.js";
 import type { NativeBinding } from "./native-binding.js";
+import { isMissingNativePackage } from "./native-load-error.js";
 import type { ProcSafeNativeMode, ProcSafeNativeStatusReason } from "./native-status.js";
 
 const require = createRequire(import.meta.url);
@@ -25,13 +26,10 @@ export function getNativeModeSetting(): { mode: ProcSafeNativeMode; source: "PRO
 function classifyLoadFailure(error: unknown, packageName: string): typeof loadOutcome {
   try {
     const code = typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
-    if (code === "MODULE_NOT_FOUND" && error instanceof Error &&
-      error.message.split("\n", 1)[0] === `Cannot find module '${packageName}'`) {
+    if (isMissingNativePackage(error, packageName)) {
       try { require.resolve(packageName); }
       catch (resolutionError) {
-        if (resolutionError instanceof Error && "code" in resolutionError &&
-          resolutionError.code === "MODULE_NOT_FOUND" &&
-          resolutionError.message.split("\n", 1)[0] === `Cannot find module '${packageName}'`) {
+        if (isMissingNativePackage(resolutionError, packageName)) {
           return { reason: "package-missing" };
         }
       }

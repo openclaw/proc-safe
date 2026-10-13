@@ -1,5 +1,12 @@
 # API
 
+`@openclaw/proc-safe/windows-token` exports [current-process AppContainer facts](windows-token.md):
+
+```ts
+function isSupported(): boolean;
+function readCurrentAppContainerSid(): string | null;
+```
+
 The root exports [`getProcSafeNativeStatus(options?)`](native-status.md) and its
 status types for optional, path-free native health checks.
 

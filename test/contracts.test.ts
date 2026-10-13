@@ -24,7 +24,7 @@ describe("public contracts", () => {
       let loads = 0;
       process.dlopen = () => { loads++; throw new Error('addon was loaded during import'); };
       process.env.PROC_SAFE_NATIVE = 'require';
-      for (const name of ['index', 'errors', 'identity', 'darwin', 'inspect', 'reaper', 'diagnostics', 'test-support', 'systemd', 'windows-job']) await import('./dist/' + name + '.js');
+      for (const name of ['index', 'errors', 'identity', 'darwin', 'inspect', 'reaper', 'diagnostics', 'test-support', 'systemd', 'windows-job', 'windows-token']) await import('./dist/' + name + '.js');
       if (loads !== 0) throw new Error('import attempted native loading');
       console.log('lazy');
     `], { encoding: "utf8" });

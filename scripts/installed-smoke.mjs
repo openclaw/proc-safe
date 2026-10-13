@@ -40,6 +40,7 @@ async function probe(version, target) {
     "./darwin": process.platform === "darwin",
     "./inspect": ["darwin", "win32"].includes(process.platform),
     "./windows-job": process.platform === "win32",
+    "./windows-token": process.platform === "win32",
     "./reaper": process.platform === "linux",
     "./diagnostics": process.platform === "linux",
     "./test-support": ["linux", "win32"].includes(process.platform),
@@ -78,6 +79,7 @@ async function probe(version, target) {
     assert.deepEqual(command.environment, {});
   }
   if (process.platform === "win32") {
+    assert.equal(modules["./windows-token"].readCurrentAppContainerSid(), null);
     // timeoutMs is required; leave all optional census settings at their defaults.
     const rows = modules["./inspect"].listProcesses({ timeoutMs: 5000 });
     assert.ok(rows.some(row => row.pid === process.pid && row.identity?.pid === process.pid && row.owner === "same"));

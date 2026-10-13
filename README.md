@@ -63,6 +63,7 @@ Every capability is its own subpath, so you only load what you use.
 |---|---|---|
 | [`/identity`](docs/identity.md) | Who is this PID: parent, exact birth time, exited-but-retained state, ancestry | Darwin, Linux, Windows, FreeBSD |
 | [`/inspect`](docs/inspect.md) | What is this process running: executable, argv, cwd, selected env keys; full Windows census | Darwin, Windows |
+| [`/windows-token`](docs/windows-token.md) | Is this process in an AppContainer, and which SID identifies it | Windows |
 | [`/windows-job`](docs/windows-job.md) | Spawn into a Job atomically, own its output, tie your lifetime to another process | Windows |
 | [`/reaper`](docs/reaper.md) | Become a subreaper, observe child wait state without consuming it, reap one specific child | Linux |
 | [`/systemd`](docs/systemd.md) | Talk to systemd over sd-bus with authenticated peers and real deadlines | Linux |

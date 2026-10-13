@@ -62,6 +62,9 @@ try {
       import * as systemd from '@openclaw/proc-safe/systemd';
       import * as inspect from '@openclaw/proc-safe/inspect';
       import * as windowsJobs from '@openclaw/proc-safe/windows-job';
+      import * as windowsToken from '@openclaw/proc-safe/windows-token';
+      assert.equal(windowsToken.isSupported(), process.platform === 'win32');
+      if (process.platform === 'win32') assert.equal(windowsToken.readCurrentAppContainerSid(), null);
       const require = createRequire(import.meta.url);
       assert.ok(isSupported());
       assert.equal(readProcessIdentity(process.pid).pid, process.pid);
@@ -102,6 +105,9 @@ try {
       import * as inspect from '@openclaw/proc-safe/inspect';
       if (inspect.isSupported() && !inspect.readProcessCommand(process.pid).argv.length) throw new Error('missing command');
       import * as windowsJobs from '@openclaw/proc-safe/windows-job';
+      import * as windowsToken from '@openclaw/proc-safe/windows-token';
+      assert.equal(windowsToken.isSupported(), process.platform === 'win32');
+      if (process.platform === 'win32') assert.equal(windowsToken.readCurrentAppContainerSid(), null);
       assert.equal(windowsJobs.isSupported(), process.platform === 'win32');
       if (process.platform === 'win32') {
         const job = windowsJobs.WindowsJob.create();

@@ -39,6 +39,7 @@ export interface NativePinnedProcess {
 }
 
 export interface NativeBinding {
+  readCurrentAppContainerSid?(): string | null;
   readProcessIdentity?(pid: number): ProcessIdentity | null;
   readProcessCoalition?(pid: number): DarwinCoalition | null;
   samplePageCacheResidency?(fd: number, maxPages: number): PageCacheResidency;
