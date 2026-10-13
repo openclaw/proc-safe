@@ -96,7 +96,7 @@ if (!isMainThread) {
       cpSync(nativePackageDirectory(target), packagePath, { recursive: true });
       let expected;
       try {
-        expected = execFileSync(fixture, [runtime, join(scripts, "windows-token-proof.mjs"), directory], {
+        expected = execFileSync(fixture, [runtime, join(scripts, "windows-token-proof.mjs"), directory, process.versions.bun ? "bun" : "node"], {
           encoding: "utf8", timeout: 35_000,
         }).trim();
       } catch (error) {

@@ -191,8 +191,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
     let args: Vec<_> = std::env::args().skip(1).collect();
-    if args.len() != 3 {
-        return Err("expected isolated runtime, probe script, and directory".into());
+    if args.len() != 4 || !["node", "bun"].contains(&args[3].as_str()) {
+        return Err("expected isolated runtime, probe script, directory, and runtime kind".into());
     }
     let name: Vec<u16> = format!(
         "proc-safe-proof-{}-{}",
@@ -315,19 +315,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         let executable = wide(Path::new(&args[0]));
         let cwd = wide(Path::new(&args[2]));
-        let mut command: Vec<u16> = [
-            args[0].as_str(),
-            args[1].as_str(),
-            "--contained",
-            expected.as_str(),
-        ]
-        .iter()
-        .map(|arg| quote(arg))
-        .collect::<Vec<_>>()
-        .join(" ")
-        .encode_utf16()
-        .chain([0])
-        .collect();
+        let mut launch = vec![args[0].as_str()];
+        if args[3] == "node" {
+            // The copied tree has no symlinks; avoid Node's JS realpath walk through denied ancestors.
+            launch.extend(["--preserve-symlinks", "--preserve-symlinks-main"]);
+        }
+        launch.extend([args[1].as_str(), "--contained", expected.as_str()]);
+        let mut command: Vec<u16> = launch
+            .iter()
+            .map(|arg| quote(arg))
+            .collect::<Vec<_>>()
+            .join(" ")
+            .encode_utf16()
+            .chain([0])
+            .collect();
         let mut startup: STARTUPINFOEXW = unsafe { zeroed() };
         startup.StartupInfo.cb = size_of::<STARTUPINFOEXW>() as u32;
         startup.lpAttributeList = attributes.0.as_mut_ptr().cast();
