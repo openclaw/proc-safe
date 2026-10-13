@@ -56,14 +56,15 @@ jobs:
       - name: Native Node contracts and main/Worker proof
         env:
           PROC_SAFE_NATIVE: require
-        run: pnpm test
+        # Process-heavy Windows fixtures share runner CPU; retain every per-test deadline.
+        run: pnpm test --fileParallelism=${{ runner.os != 'Windows' }}
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: 1.4.2
       - name: Native Bun contracts and main/Worker proof
         env:
           PROC_SAFE_NATIVE: require
-        run: pnpm test:bun
+        run: pnpm test:bun --fileParallelism=${{ runner.os != 'Windows' }}
       - name: Real systemd cross-user machine bridge on Node and Bun
         if: runner.os == 'Linux'
         run: |
