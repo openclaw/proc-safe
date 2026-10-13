@@ -30,6 +30,11 @@ async function probe(version, target) {
     modules[subpath] = await import(name);
   }
   assert.equal(modules["."].ProcSafeError, modules["./errors"].ProcSafeError);
+  const native = await modules["."].getProcSafeNativeStatus({ probe: true });
+  assert.equal(native.reason, "loaded");
+  assert.equal(native.loaded, true);
+  assert.equal(native.packageName, target);
+  assert.equal(native.packageVersion, version);
   const expected = {
     "./identity": true,
     "./darwin": process.platform === "darwin",

@@ -1,5 +1,8 @@
 # API
 
+The root exports [`getProcSafeNativeStatus(options?)`](native-status.md) and its
+status types for optional, path-free native health checks.
+
 See [systemd connections](systemd.md) for the Linux `./systemd` subpath, typed
 messages, connection ownership, and deadline and authentication contracts.
 

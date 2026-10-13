@@ -21,9 +21,11 @@ describe("public contracts", () => {
   });
   test("every subpath imports without loading a binding or spawning a process", () => {
     const output = execFileSync(process.execPath, ["--input-type=module", "-e", `
-      process.dlopen = () => { throw new Error('addon was loaded during import'); };
+      let loads = 0;
+      process.dlopen = () => { loads++; throw new Error('addon was loaded during import'); };
       process.env.PROC_SAFE_NATIVE = 'require';
       for (const name of ['index', 'errors', 'identity', 'darwin', 'inspect', 'reaper', 'diagnostics', 'test-support', 'systemd', 'windows-job']) await import('./dist/' + name + '.js');
+      if (loads !== 0) throw new Error('import attempted native loading');
       console.log('lazy');
     `], { encoding: "utf8" });
     expect(output.trim()).toBe("lazy");

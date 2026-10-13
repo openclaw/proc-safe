@@ -14,3 +14,7 @@ test("native command inspection and Worker boundaries", async () => {
   const { proveInspection } = await import("./inspect-proof.mjs");
   await proveInspection();
 });
+
+test("native status on main and Worker", async () => {
+  await import("./native-status-proof.mjs");
+});

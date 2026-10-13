@@ -90,3 +90,8 @@ inaccessible and vanished rows. Each row uses one retained process object for va
 SID comparison, existing identity decoding, and optional command inspection. Native monotonic
 budget checks and a final wrapper check reject expired calls without a partial result. Windows
 environment selection uses ordinal case-insensitive comparison and preserves requested casing.
+
+The root [`getProcSafeNativeStatus()`](native-status.md) entry defers the status and
+loader modules until called. Its default reads the cached loader outcome; an
+explicit `{ probe: true }` attempts native loading. Reports contain only named
+reasons, allowlisted error codes, and package metadata, never loader paths.

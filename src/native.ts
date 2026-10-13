@@ -3,12 +3,60 @@ import { closeSync, openSync, readSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { ProcSafeError } from "./errors.js";
 import type { NativeBinding } from "./native-binding.js";
+import type { ProcSafeNativeMode, ProcSafeNativeStatusReason } from "./native-status.js";
 
 const require = createRequire(import.meta.url);
 const initialize = AsyncLocalStorage.snapshot();
 let binding: NativeBinding | undefined;
 let attempted = false;
 let loadError: unknown;
+let loadOutcome: { reason: ProcSafeNativeStatusReason; code?: string } = { reason: "not-probed" };
+let selectedTarget: string | undefined;
+let targetDescription: string | undefined;
+
+export function getNativeModeSetting(): { mode: ProcSafeNativeMode; source: "PROC_SAFE_NATIVE" | "default" } {
+  const mode = process.env.PROC_SAFE_NATIVE ?? "auto";
+  if (mode !== "auto" && mode !== "off" && mode !== "require") {
+    throw new ProcSafeError("invalid-argument", "PROC_SAFE_NATIVE must be auto, off, or require");
+  }
+  return { mode, source: process.env.PROC_SAFE_NATIVE === undefined ? "default" : "PROC_SAFE_NATIVE" };
+}
+
+function classifyLoadFailure(error: unknown, packageName: string): typeof loadOutcome {
+  try {
+    const code = typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+    if (code === "MODULE_NOT_FOUND" && error instanceof Error &&
+      error.message.split("\n", 1)[0] === `Cannot find module '${packageName}'`) {
+      try { require.resolve(packageName); }
+      catch (resolutionError) {
+        if (resolutionError instanceof Error && "code" in resolutionError &&
+          resolutionError.code === "MODULE_NOT_FOUND" &&
+          resolutionError.message.split("\n", 1)[0] === `Cannot find module '${packageName}'`) {
+          return { reason: "package-missing" };
+        }
+      }
+    }
+    const knownCodes = ["ERR_DLOPEN_FAILED", "MODULE_NOT_FOUND", "ERR_MODULE_NOT_FOUND",
+      "ERR_PACKAGE_PATH_NOT_EXPORTED", "ERR_INVALID_PACKAGE_CONFIG", "EACCES", "EPERM", "ENOENT"];
+    return { reason: "load-failed", code: typeof code === "string" && knownCodes.includes(code) ? code : "UNKNOWN" };
+  } catch {
+    return { reason: "load-failed", code: "UNKNOWN" };
+  }
+}
+
+/** Read cached diagnostics without loading native code. */
+export function getNativeDiagnostic() {
+  const selected = target();
+  const packageName = selected === undefined ? undefined : `@openclaw/proc-safe-${selected}`;
+  const manifest = require("../package.json") as { optionalDependencies: Record<string, string> };
+  return {
+    ...loadOutcome,
+    ...(getNativeModeSetting().mode === "off" ? { reason: "disabled" as const } : {}),
+    target: targetDescription!,
+    packageName,
+    packageVersion: packageName === undefined ? undefined : manifest.optionalDependencies[packageName],
+  };
+}
 
 function isMuslFilename(file: string): boolean {
   return file.includes("libc.musl-") || file.includes("ld-musl-");
@@ -140,26 +188,31 @@ function isMusl(): boolean {
 
 
 function target(): string | undefined {
+  if (targetDescription !== undefined) return selectedTarget;
   const { platform, arch } = process;
-  if (arch !== "x64" && arch !== "arm64") return undefined;
-  if (platform === "darwin" || platform === "freebsd") return `${platform}-${arch}`;
-  if (platform === "win32") return `win32-${arch}-msvc`;
-  if (platform === "linux") return `linux-${arch}-${isMusl() ? "musl" : "gnu"}`;
-  return undefined;
+  const suffix = platform === "linux" ? `-${isMusl() ? "musl" : "gnu"}` : platform === "win32" ? "-msvc" : "";
+  targetDescription = `${platform}-${arch}${suffix}`;
+  if ((arch === "x64" || arch === "arm64") && ["darwin", "freebsd", "win32", "linux"].includes(platform)) {
+    selectedTarget = targetDescription;
+  }
+  return selectedTarget;
 }
 
 export function getNativeBinding(): NativeBinding | undefined {
-  const mode = process.env.PROC_SAFE_NATIVE ?? "auto";
-  if (mode !== "auto" && mode !== "off" && mode !== "require") {
-    throw new ProcSafeError("invalid-argument", "PROC_SAFE_NATIVE must be auto, off, or require");
-  }
+  const { mode } = getNativeModeSetting();
   if (mode === "off") return undefined;
   if (!attempted) {
     attempted = true;
     try {
       const selected = target();
-      if (selected) binding = initialize(() => require(`@openclaw/proc-safe-${selected}`)) as NativeBinding;
-    } catch (error) { loadError = error; }
+      if (selected) {
+        binding = initialize(() => require(`@openclaw/proc-safe-${selected}`)) as NativeBinding;
+        loadOutcome = { reason: typeof binding?.readProcessIdentity === "function" ? "loaded" : "capability-missing" };
+      } else loadOutcome = { reason: "unsupported-target" };
+    } catch (error) {
+      loadError = error;
+      loadOutcome = classifyLoadFailure(error, `@openclaw/proc-safe-${selectedTarget}`);
+    }
   }
   if (!binding && mode === "require") {
     throw new ProcSafeError("helper-unavailable", "native proc-safe binding is unavailable", { cause: loadError });

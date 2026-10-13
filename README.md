@@ -209,6 +209,17 @@ supervisors — not for production code. [Diagnostics](docs/diagnostics.md) ·
 native-only operations then throw `helper-unavailable`. `require` makes a missing binding an
 immediate error. Imports never load native code in any mode. [Native architecture](docs/native.md).
 
+```ts
+import { getProcSafeNativeStatus } from "@openclaw/proc-safe";
+
+const native = await getProcSafeNativeStatus({ probe: true });
+console.log(native.loaded ? "Native helper active" : `Native helper: ${native.reason}`);
+if (native.guidance) console.log(native.guidance);
+```
+
+Without `probe: true`, this reads the cached state without loading the addon. Results omit
+paths and raw loader errors. See [native status](docs/native-status.md) for fields and recovery guidance.
+
 ## Platforms
 
 Prebuilt for ten targets, each tested on real hardware or a real kernel in CI, on the main thread
