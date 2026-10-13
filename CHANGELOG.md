@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 - 2026-10-13
 
 - Add `windows-token` AppContainer SID inspection, with explicit errors when token state cannot be determined. Thanks @jonathanlindsay for the AppContainer detection idea.
 
