@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.1 - 2026-10-17
+
 - Darwin census works in sandboxes that deny `sysctl.proc_translated`, including under Rosetta; native arm64 command inspection no longer requires that query.
 
 ## 0.4.0 - 2026-10-17
