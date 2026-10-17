@@ -1,6 +1,6 @@
 {
   "name": "@openclaw/proc-safe-linux-arm64-gnu",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "linux-arm64-gnu native binding for @openclaw/proc-safe.",
   "license": "MIT",
   "author": "OpenClaw Foundation (https://openclaw.org)",

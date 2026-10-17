@@ -1,6 +1,6 @@
 {
   "name": "@openclaw/proc-safe-win32-x64-msvc",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "win32-x64-msvc native binding for @openclaw/proc-safe.",
   "license": "MIT",
   "author": "OpenClaw Foundation (https://openclaw.org)",
