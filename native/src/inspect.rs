@@ -56,8 +56,15 @@ pub struct ProcessSnapshot {
 
 #[cfg(windows)]
 #[napi]
-pub fn list_processes(timeout_ms: f64, include_command: bool) -> Result<Vec<ProcessSnapshot>> {
-    windows::list(timeout_ms, include_command)
+pub fn list_processes(
+    timeout_ms: f64,
+    include_command: bool,
+    pids: Option<Vec<u32>>,
+) -> Result<Vec<ProcessSnapshot>> {
+    if pids.as_ref().is_some_and(|pids| pids.contains(&0)) {
+        return Err(failure("invalid-argument", "invalid process ID"));
+    }
+    windows::list(timeout_ms, include_command, pids)
 }
 
 #[cfg(target_os = "macos")]
@@ -646,7 +653,11 @@ mod windows {
         }
     }
 
-    pub fn list(timeout_ms: f64, include_command: bool) -> Result<Vec<ProcessSnapshot>> {
+    pub fn list(
+        timeout_ms: f64,
+        include_command: bool,
+        selected: Option<Vec<u32>>,
+    ) -> Result<Vec<ProcessSnapshot>> {
         let budget = Budget {
             started: std::time::Instant::now(),
             timeout_ms,
@@ -685,6 +696,10 @@ mod windows {
                 "incomplete",
                 "Windows process enumeration repeated a PID",
             ));
+        }
+        if let Some(selected) = selected {
+            let selected: std::collections::HashSet<_> = selected.into_iter().collect();
+            pids.retain(|pid| selected.contains(pid));
         }
         let self_owner = observed(token_owner(unsafe { GetCurrentProcess() }))?;
         let mut rows = Vec::with_capacity(pids.len());

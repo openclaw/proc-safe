@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Windows process census accepts `pids` to inspect selected processes while preserving complete enumeration, unknown facts, and deadline enforcement.
+
 ## 0.3.0 - 2026-10-13
 
 - Add `windows-token` AppContainer SID inspection, with explicit errors when token state cannot be determined. Thanks @jonathanlindsay for the AppContainer detection idea.

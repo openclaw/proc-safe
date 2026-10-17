@@ -14,6 +14,7 @@ function assertDenied(pid) {
     assert.throws(() => readProcessCommand(pid), error => error instanceof ProcSafeError && error.code === "access-denied");
     const rows = listProcesses({ timeoutMs: 5000, includeCommand: true });
     assert.deepEqual(rows.find(row => row.pid === pid), { pid, owner: "unknown" });
+    assert.deepEqual(listProcesses({ timeoutMs: 5000, includeCommand: true, pids: [pid] }), [{ pid, owner: "unknown" }]);
   }
 }
 

@@ -46,6 +46,12 @@ function observe(pid, expected) {
     assert.deepEqual(row.command.environment, {});
     assert.equal(Object.isFrozen(row), true);
     assert.equal(Object.isFrozen(row.identity), true);
+    const selected = listProcesses({ timeoutMs: 5000, includeCommand: true, pids: [pid, pid] });
+    assert.equal(selected.length, 1);
+    assert.equal(selected[0].pid, pid);
+    assert.equal(selected[0].owner, "same");
+    assert.deepEqual(selected[0].identity, row.identity);
+    assert.deepEqual(selected[0].command, row.command);
   } else {
     assert.equal(command.cwd, undefined);
     assert.equal(command.commandLine, undefined);
@@ -96,6 +102,13 @@ function proveCensusOptions() {
   assert.ok(rows.every(row => row.command === undefined));
   // Idle has no user-mode process handle but remains in the complete PID list.
   assert.deepEqual(rows.find(row => row.pid === 0), { pid: 0, owner: "unknown" });
+  assert.deepEqual(listProcesses({ timeoutMs: 5000, pids: [] }), []);
+  assert.equal(readProcessIdentity(0xffff_ffff), null);
+  assert.deepEqual(listProcesses({ timeoutMs: 5000, pids: [0xffff_ffff] }), []);
+  const selected = listProcesses({ timeoutMs: 5000, pids: [process.pid, process.pid] });
+  assert.equal(selected.length, 1);
+  assert.equal(selected[0].pid, process.pid);
+  assert.equal(selected[0].command, undefined);
   assert.throws(() => listProcesses({ timeoutMs: Number.MIN_VALUE }), error => error.code === "timeout");
 }
 

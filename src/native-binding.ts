@@ -60,7 +60,7 @@ export interface NativeBinding {
     cwd?: string;
     environment: { key: string; value: string }[];
   } | null;
-  listProcesses?(timeoutMs: number, includeCommand: boolean): {
+  listProcesses?(timeoutMs: number, includeCommand: boolean, pids?: number[]): {
     pid: number;
     owner: ProcessSnapshot["owner"];
     identity?: ProcessIdentity;

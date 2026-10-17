@@ -19,6 +19,17 @@ test.each([0, -1, NaN, Infinity])("census rejects invalid timeout %s", timeoutMs
   expect(() => listProcesses({ timeoutMs })).toThrow(expect.objectContaining({ code: "invalid-argument" }));
 });
 
+test.each([0, -1, 1.2, NaN, Infinity, 0x1_0000_0000])("census rejects invalid selected PID %s", pid => {
+  expect(() => listProcesses({ timeoutMs: 1000, pids: [pid] })).toThrow(expect.objectContaining({ code: "invalid-argument" }));
+});
+
+test("census rejects non-array and sparse PID selections", () => {
+  for (const pids of ["123", null, {}, new Array(1)]) {
+    // @ts-expect-error exercise JavaScript callers with malformed selections
+    expect(() => listProcesses({ timeoutMs: 1000, pids })).toThrow(expect.objectContaining({ code: "invalid-argument" }));
+  }
+});
+
 test("census is Windows-only", () => {
   if (process.platform === "win32") {
     if (process.env.PROC_SAFE_NATIVE === "require") {

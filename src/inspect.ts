@@ -51,12 +51,16 @@ export function readProcessCommand(pid: number, options?: { environmentKeys?: re
 }
 
 /** Complete Windows PID census; unavailable per-process facts remain explicitly unknown. */
-export function listProcesses(options: { timeoutMs: number; includeCommand?: boolean }): ProcessSnapshot[] {
+export function listProcesses(options: { timeoutMs: number; includeCommand?: boolean; pids?: readonly number[] }): ProcessSnapshot[] {
   const start = performance.now();
   const timeoutMs = options?.timeoutMs;
   if (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs) || timeoutMs <= 0
     || (options.includeCommand !== undefined && typeof options.includeCommand !== "boolean")) {
     throw new ProcSafeError("invalid-argument", "timeoutMs must be positive and finite; includeCommand must be boolean");
+  }
+  if (options.pids !== undefined) {
+    if (!Array.isArray(options.pids)) throw new ProcSafeError("invalid-argument", "pids must be an array of platform PIDs");
+    for (const pid of options.pids) validatePid(pid);
   }
   if (process.platform !== "win32" || !["x64", "arm64"].includes(process.arch)) {
     throw new ProcSafeError("unsupported-platform", "process census requires Windows");
@@ -64,7 +68,7 @@ export function listProcesses(options: { timeoutMs: number; includeCommand?: boo
   const query = getNativeBinding()?.listProcesses;
   if (!query) throw new ProcSafeError("helper-unavailable", "native process census is unavailable");
   try {
-    const rows = query(timeoutMs, options.includeCommand ?? false).map(row => Object.freeze({
+    const rows = query(timeoutMs, options.includeCommand ?? false, options.pids === undefined ? undefined : [...new Set(options.pids)]).map(row => Object.freeze({
       pid: row.pid,
       owner: row.owner,
       ...(row.identity === undefined ? {} : { identity: Object.freeze(row.identity) }),

@@ -55,11 +55,18 @@ const observations = listProcesses({ timeoutMs: 5000, includeCommand: true });
 const sameOwner = observations.filter(row => row.owner === 'same');
 ```
 
-`listProcesses({ timeoutMs, includeCommand? })` is Windows-only. It returns one frozen
+`listProcesses({ timeoutMs, includeCommand?, pids? })` is Windows-only. Darwin, Linux,
+and FreeBSD census calls throw `unsupported-platform`. It returns one frozen
 `ProcessSnapshot` per enumerated PID, including inaccessible processes and PIDs that vanish
 before their details can be read. Each row has `pid`, `owner` (`'same'`, `'different'`, or
 `'unknown'`), optional `identity` (the existing `ProcessIdentity` type), and optional `command`.
 Unknown facts never establish absence or ownership. No owner filtering is performed.
+
+`pids` restricts observations to the selected positive platform PIDs. Duplicate selections
+produce one row, an empty selection returns an empty array, and selected PIDs absent from
+the complete enumeration are omitted. Inaccessible selected processes remain present with
+unknown facts. Filtering happens natively before per-process reads; enumeration completeness
+and the same deadline still apply. Without `pids`, all enumerated PIDs are returned as before.
 
 Owner comparison uses validated user SIDs from process access tokens. An unreadable token
 produces `owner: 'unknown'`. If the caller's own SID is unreadable, all owner comparisons

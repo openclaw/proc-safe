@@ -20,6 +20,11 @@ function verify() {
   assert.ok(self?.identity);
   assert.equal(self.identity.pid, process.pid);
   assert.deepEqual(self.command, readProcessCommand(process.pid));
+  const selected = listProcesses({ timeoutMs: 5000, includeCommand: true, pids: [process.pid] });
+  assert.equal(selected.length, 1);
+  assert.equal(selected[0].owner, "unknown");
+  assert.deepEqual(selected[0].identity, self.identity);
+  assert.deepEqual(selected[0].command, self.command);
 }
 if (isMainThread) {
   const worker = new Worker(new URL(import.meta.url));

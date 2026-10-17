@@ -149,7 +149,7 @@ const command = readProcessCommand(pid, { environmentKeys: ["MY_SERVICE_ID"] });
 
 Only the environment keys you name ever leave native code. On Windows,
 `listProcesses({ timeoutMs })` returns a complete census or throws — never a silently partial
-list — and rows keep unknown facts explicit (`owner: "unknown"`, no `identity`) instead of
+list — and accepts `pids` to inspect only selected processes. Rows keep unknown facts explicit (`owner: "unknown"`, no `identity`) instead of
 dropping protected processes. [Command inspection](docs/inspect.md).
 
 ## Windows jobs
