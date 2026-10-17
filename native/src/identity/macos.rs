@@ -51,12 +51,14 @@ pub fn read(pid: u32) -> Result<Option<ProcessIdentity>> {
 
 #[repr(C)]
 #[derive(Default)]
-struct BsdIdentity {
-    pid: u32,
-    parent_pid: u32,
+pub(crate) struct BsdIdentity {
+    pub pid: u32,
+    pub parent_pid: u32,
     seconds: i64,
     microseconds: i64,
-    state: u32,
+    pub state: u32,
+    pub process_group_id: u32,
+    pub uid: u32,
 }
 
 unsafe extern "C" {
@@ -64,6 +66,25 @@ unsafe extern "C" {
 }
 
 fn read_kernel_object(pid: u32) -> Result<Option<ProcessIdentity>> {
+    let Some(info) = read_kernel_info(pid)? else {
+        return Ok(None);
+    };
+    let micros = (info.seconds as u64)
+        .checked_mul(1_000_000)
+        .and_then(|v| v.checked_add(info.microseconds as u64))
+        .ok_or_else(|| failure("layout-mismatch", "process start time overflow"))?;
+    identity(
+        pid,
+        info.parent_pid,
+        micros,
+        1.0,
+        None,
+        info.state == libc::SZOMB,
+    )
+    .map(Some)
+}
+
+pub(crate) fn read_kernel_info(pid: u32) -> Result<Option<BsdIdentity>> {
     let mut info = BsdIdentity::default();
     let result = unsafe { proc_safe_read_bsd_identity(pid, &mut info) };
     if result == 1 {
@@ -94,17 +115,5 @@ fn read_kernel_object(pid: u32) -> Result<Option<ProcessIdentity>> {
             "invalid Darwin kernel process identity",
         ));
     }
-    let micros = (info.seconds as u64)
-        .checked_mul(1_000_000)
-        .and_then(|v| v.checked_add(info.microseconds as u64))
-        .ok_or_else(|| failure("layout-mismatch", "process start time overflow"))?;
-    identity(
-        pid,
-        info.parent_pid,
-        micros,
-        1.0,
-        None,
-        info.state == libc::SZOMB,
-    )
-    .map(Some)
+    Ok(Some(info))
 }

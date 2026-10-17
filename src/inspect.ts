@@ -12,11 +12,16 @@ export type ProcessCommand = {
   readonly environment: Readonly<Record<string, string>>;
 };
 
+export type ProcessState = "running" | "sleeping" | "stopped" | "zombie" | "idle" | "unknown";
+
 export type ProcessSnapshot = {
   readonly pid: number;
+  readonly parentPid?: number;
   readonly identity?: ProcessIdentity;
   readonly owner: "same" | "different" | "unknown";
   readonly command?: ProcessCommand;
+  readonly processGroupId?: number;
+  readonly state?: ProcessState;
 };
 
 function commandResult(result: NonNullable<ReturnType<NonNullable<NativeBinding["readProcessCommand"]>>>): ProcessCommand {
@@ -50,7 +55,7 @@ export function readProcessCommand(pid: number, options?: { environmentKeys?: re
   } catch (error) { throw fromNativeError(error); }
 }
 
-/** Complete Windows PID census; unavailable per-process facts remain explicitly unknown. */
+/** Complete Darwin or Windows PID census; unreadable facts remain explicitly unknown. */
 export function listProcesses(options: { timeoutMs: number; includeCommand?: boolean; pids?: readonly number[] }): ProcessSnapshot[] {
   const start = performance.now();
   const timeoutMs = options?.timeoutMs;
@@ -62,8 +67,8 @@ export function listProcesses(options: { timeoutMs: number; includeCommand?: boo
     if (!Array.isArray(options.pids)) throw new ProcSafeError("invalid-argument", "pids must be an array of platform PIDs");
     for (const pid of options.pids) validatePid(pid);
   }
-  if (process.platform !== "win32" || !["x64", "arm64"].includes(process.arch)) {
-    throw new ProcSafeError("unsupported-platform", "process census requires Windows");
+  if (!platformSupported()) {
+    throw new ProcSafeError("unsupported-platform", "process census requires Darwin or Windows");
   }
   const query = getNativeBinding()?.listProcesses;
   if (!query) throw new ProcSafeError("helper-unavailable", "native process census is unavailable");
@@ -71,6 +76,9 @@ export function listProcesses(options: { timeoutMs: number; includeCommand?: boo
     const rows = query(timeoutMs, options.includeCommand ?? false, options.pids === undefined ? undefined : [...new Set(options.pids)]).map(row => Object.freeze({
       pid: row.pid,
       owner: row.owner,
+      ...(row.parentPid === undefined ? {} : { parentPid: row.parentPid }),
+      ...(row.processGroupId === undefined ? {} : { processGroupId: row.processGroupId }),
+      ...(row.state === undefined ? {} : { state: row.state }),
       ...(row.identity === undefined ? {} : { identity: Object.freeze(row.identity) }),
       ...(row.command === undefined ? {} : { command: commandResult(row.command) }),
     }));
@@ -84,7 +92,7 @@ export function isSupported(): boolean {
     if (!platformSupported()) return false;
     const binding = getNativeBinding();
     return typeof binding?.readProcessCommand === "function"
-      && (process.platform !== "win32" || typeof binding.listProcesses === "function")
+      && typeof binding.listProcesses === "function"
       && binding.inspectSupported?.() === true;
   } catch { return false; }
 }

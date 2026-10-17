@@ -39,7 +39,7 @@ never at import time.
 ## Contents
 
 [Install](#install) · [Capabilities](#capabilities) · [Three outcomes](#three-outcomes-never-guess) ·
-[Process identity](#process-identity) · [Command inspection](#command-inspection-and-windows-census) ·
+[Process identity](#process-identity) · [Command inspection](#command-inspection-and-process-census) ·
 [Windows jobs](#windows-jobs) · [Linux reaping](#linux-child-reaping) · [systemd](#systemd) ·
 [Diagnostics](#diagnostics-and-test-fixtures) · [Native loading](#native-loading) ·
 [Platforms](#platforms) · [Safety model](#safety-model) · [License](#license)
@@ -62,7 +62,7 @@ Every capability is its own subpath, so you only load what you use.
 | Subpath | What it answers | Platforms |
 |---|---|---|
 | [`/identity`](docs/identity.md) | Who is this PID: parent, exact birth time, exited-but-retained state, ancestry | Darwin, Linux, Windows, FreeBSD |
-| [`/inspect`](docs/inspect.md) | What is this process running: executable, argv, cwd, selected env keys; full Windows census | Darwin, Windows |
+| [`/inspect`](docs/inspect.md) | Executable, argv, selected env keys; complete process census with parentage and ownership; Darwin groups and state | Darwin, Windows |
 | [`/windows-token`](docs/windows-token.md) | Is this process in an AppContainer, and which SID identifies it | Windows |
 | [`/windows-job`](docs/windows-job.md) | Spawn into a Job atomically, own its output, tie your lifetime to another process | Windows |
 | [`/reaper`](docs/reaper.md) | Become a subreaper, observe child wait state without consuming it, reap one specific child | Linux |
@@ -138,7 +138,7 @@ requested ancestor and is complete. Starting with PID ≤1 throws `invalid-argum
 with `details.reason === "init-process"` before any native read; PID 0 and 1 are never read.
 Details and migration from the former array return: [identity and visibility](docs/identity.md).
 
-## Command inspection and Windows census
+## Command inspection and process census
 
 ```ts
 import { readProcessCommand, listProcesses } from "@openclaw/proc-safe/inspect";
@@ -147,10 +147,12 @@ const command = readProcessCommand(pid, { environmentKeys: ["MY_SERVICE_ID"] });
 // { executable, argv, cwd?, commandLine?, environment: { MY_SERVICE_ID?: string } }
 ```
 
-Only the environment keys you name ever leave native code. On Windows,
+Only the environment keys you name ever leave native code. On Darwin and Windows,
 `listProcesses({ timeoutMs })` returns a complete census or throws — never a silently partial
 list — and accepts `pids` to inspect only selected processes. Rows keep unknown facts explicit (`owner: "unknown"`, no `identity`) instead of
-dropping protected processes. [Command inspection](docs/inspect.md).
+dropping protected processes. Darwin reports parent PID, process group, and kernel state
+independently of restricted birth identity, including foreign-owner topology and zombies.
+Linux and FreeBSD census remains unsupported. [Command inspection and census](docs/inspect.md).
 
 ## Windows jobs
 

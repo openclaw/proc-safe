@@ -124,12 +124,16 @@ type ProcessCommand = {
   readonly environment: Readonly<Record<string, string>>;
 };
 function readProcessCommand(pid: number, options?: { environmentKeys?: readonly string[] }): ProcessCommand | null;
+type ProcessState = "running" | "sleeping" | "stopped" | "zombie" | "idle" | "unknown";
 type ProcessSnapshot = {
   readonly pid: number;
+  readonly parentPid?: number;
   readonly identity?: ProcessIdentity;
   readonly owner: "same" | "different" | "unknown";
   readonly command?: ProcessCommand;
+  readonly processGroupId?: number;
+  readonly state?: ProcessState;
 };
-function listProcesses(options: { timeoutMs: number; includeCommand?: boolean }): ProcessSnapshot[];
+function listProcesses(options: { timeoutMs: number; includeCommand?: boolean; pids?: readonly number[] }): ProcessSnapshot[];
 function isSupported(): boolean;
 ```

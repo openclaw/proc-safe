@@ -46,7 +46,7 @@ its mutable command, working directory, or environment. Access denial, malformed
 unreadable memory, retained exited objects without readable arguments, and incomplete data
 throw `ProcSafeError`, never an empty command or a false absence. There is no shell fallback.
 
-## Windows process census
+## Process census
 
 ```ts
 import { listProcesses } from '@openclaw/proc-safe/inspect';
@@ -55,11 +55,10 @@ const observations = listProcesses({ timeoutMs: 5000, includeCommand: true });
 const sameOwner = observations.filter(row => row.owner === 'same');
 ```
 
-`listProcesses({ timeoutMs, includeCommand?, pids? })` is Windows-only. Darwin, Linux,
-and FreeBSD census calls throw `unsupported-platform`. It returns one frozen
-`ProcessSnapshot` per enumerated PID, including inaccessible processes and PIDs that vanish
-before their details can be read. Each row has `pid`, `owner` (`'same'`, `'different'`, or
-`'unknown'`), optional `identity` (the existing `ProcessIdentity` type), and optional `command`.
+`listProcesses({ timeoutMs, includeCommand?, pids? })` supports native Darwin and Windows
+arm64/x64. Linux and FreeBSD census calls throw `unsupported-platform`. It returns frozen
+`ProcessSnapshot` rows with `pid`, `owner` (`'same'`, `'different'`, or `'unknown'`), optional
+`parentPid`, optional `identity` (the existing `ProcessIdentity` type), and optional `command`.
 Unknown facts never establish absence or ownership. No owner filtering is performed.
 
 `pids` restricts observations to the selected positive platform PIDs. Duplicate selections
@@ -68,7 +67,25 @@ the complete enumeration are omitted. Inaccessible selected processes remain pre
 unknown facts. Filtering happens natively before per-process reads; enumeration completeness
 and the same deadline still apply. Without `pids`, all enumerated PIDs are returned as before.
 
-Owner comparison uses validated user SIDs from process access tokens. An unreadable token
+Darwin also reports `processGroupId` and `state` when readable. `ProcessState` is
+`'running' | 'sleeping' | 'stopped' | 'zombie' | 'idle' | 'unknown'`, mapped directly from
+the kernel's BSD process status; a runnable process can have sleeping threads. Short BSD
+records supply parentage, group, effective UID, and status independently of restricted birth
+information. Owner comparison uses the caller's effective UID. A foreign-owner process can
+therefore have readable topology and `owner: 'different'` while `identity` stays absent.
+Denied short records retain the PID with unknown facts. The kernel-record mechanism resolves
+libproc's `ESRCH` for zombies and distinguishes retained objects from proven disappearance;
+proven gone PIDs are omitted. PID 0 is the kernel task and is excluded on Darwin.
+
+Darwin birth identities bracket topology and optional command reads. If birth identity is
+unreadable or changes, the row retains only independently observed topology; it never combines
+a command with an unverified process instance. All observations can race with later changes;
+the census does not pin Darwin processes. Rosetta is unsupported, as for command inspection.
+
+Windows leaves `processGroupId` and `state` absent and reports `parentPid` when its retained
+process observation supplies identity. It preserves inaccessible and vanished enumerated rows.
+
+Windows owner comparison uses validated user SIDs from process access tokens. An unreadable token
 produces `owner: 'unknown'`. If the caller's own SID is unreadable, all owner comparisons
 remain unknown while other row facts are still collected. Identity and command observations use that same retained process
 object, avoiding PID reuse between a row's facts. Unreadable or malformed per-process facts

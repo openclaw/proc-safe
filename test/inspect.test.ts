@@ -30,8 +30,8 @@ test("census rejects non-array and sparse PID selections", () => {
   }
 });
 
-test("census is Windows-only", () => {
-  if (process.platform === "win32") {
+test("census supports Darwin and Windows", () => {
+  if (["darwin", "win32"].includes(process.platform)) {
     if (process.env.PROC_SAFE_NATIVE === "require") {
       expect(listProcesses({ timeoutMs: 1000 }).some(row => row.pid === process.pid)).toBe(true);
     } else {
@@ -40,4 +40,9 @@ test("census is Windows-only", () => {
   } else {
     expect(() => listProcesses({ timeoutMs: 1000 })).toThrow(expect.objectContaining({ code: "unsupported-platform" }));
   }
+});
+
+test.runIf(process.env.PROC_SAFE_NATIVE === "require" && process.platform === "darwin")("real Darwin census and Worker boundaries", () => {
+  const output = execFileSync(process.execPath, ["scripts/darwin-census-proof.mjs"], { encoding: "utf8", timeout: 10_000 });
+  expect(JSON.parse(output)).toMatchObject({ platform: "darwin", arch: process.arch, passed: 8 });
 });

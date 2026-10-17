@@ -77,12 +77,11 @@ async function probe(version, target) {
     const command = modules["./inspect"].readProcessCommand(process.pid);
     assert.ok(command?.executable && command.argv.length > 0);
     assert.deepEqual(command.environment, {});
+    const rows = modules["./inspect"].listProcesses({ timeoutMs: 5000 });
+    assert.ok(rows.some(row => row.pid === process.pid && row.parentPid === identity.parentPid && row.owner === "same"));
   }
   if (process.platform === "win32") {
     assert.equal(modules["./windows-token"].readCurrentAppContainerSid(), null);
-    // timeoutMs is required; leave all optional census settings at their defaults.
-    const rows = modules["./inspect"].listProcesses({ timeoutMs: 5000 });
-    assert.ok(rows.some(row => row.pid === process.pid && row.identity?.pid === process.pid && row.owner === "same"));
     assert.equal(typeof modules["./windows-job"].isCurrentProcessInJob(), "boolean");
     const pin = modules["./windows-job"].PinnedProcess.open(process.pid);
     assert.ok(pin);

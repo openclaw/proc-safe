@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Windows process census accepts `pids` to inspect selected processes while preserving complete enumeration, unknown facts, and deadline enforcement.
+- Add Darwin process census with independent parentage, process groups, ownership, and kernel state, including zombies and foreign-owner topology when birth identity is denied; Darwin and Windows censuses accept selected `pids`, and Windows rows report known parent PIDs.
 
 ## 0.3.0 - 2026-10-13
 

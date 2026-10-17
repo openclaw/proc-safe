@@ -62,6 +62,9 @@ export interface NativeBinding {
   } | null;
   listProcesses?(timeoutMs: number, includeCommand: boolean, pids?: number[]): {
     pid: number;
+    parentPid?: number;
+    processGroupId?: number;
+    state?: ProcessSnapshot["state"];
     owner: ProcessSnapshot["owner"];
     identity?: ProcessIdentity;
     command?: NonNullable<ReturnType<NonNullable<NativeBinding["readProcessCommand"]>>>;
