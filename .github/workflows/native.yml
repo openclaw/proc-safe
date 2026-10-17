@@ -76,7 +76,7 @@ jobs:
           if [ -n "${PROC_SAFE_SYSTEMD_UNIT:-}" ]; then
             systemctl --user stop "$PROC_SAFE_SYSTEMD_UNIT"
           fi
-      - name: Real Rosetta refusal on main and Worker
+      - name: Real Rosetta census and command refusal on main and Worker
         if: matrix.label == 'darwin-arm64'
         run: |
           node_version="$(node --version)"
@@ -85,6 +85,10 @@ jobs:
           rustup target add x86_64-apple-darwin
           node scripts/build-native.mjs x86_64-apple-darwin
           arch -x86_64 "$RUNNER_TEMP/node-${node_version}-darwin-x64/bin/node" scripts/inspect-proof.mjs --rosetta
+          arch -x86_64 "$RUNNER_TEMP/node-${node_version}-darwin-x64/bin/node" scripts/check-darwin-seatbelt.mjs
+          curl --fail --location "https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-darwin-x64.zip" -o "$RUNNER_TEMP/bun-x64.zip"
+          unzip -q "$RUNNER_TEMP/bun-x64.zip" -d "$RUNNER_TEMP/bun-x64"
+          arch -x86_64 "$RUNNER_TEMP/bun-x64/bun-darwin-x64/bun" scripts/check-darwin-seatbelt.mjs
           # The Intel runtime lane owns the published x64 artifact.
           rm native/proc-safe-native.darwin-x64.node
       - name: Real Windows permission denial

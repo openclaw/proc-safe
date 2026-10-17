@@ -229,7 +229,8 @@ if (!isMainThread) {
     assert.equal(execFileSync("/usr/sbin/sysctl", ["-in", "sysctl.proc_translated"], { encoding: "utf8" }).trim(), "1");
     assert.equal(isSupported(), false);
     assert.throws(() => readProcessCommand(process.pid), error => error.code === "unsupported-platform" && /Rosetta/.test(error.message));
-    assert.throws(() => listProcesses({ timeoutMs: 5000 }), error => error.code === "unsupported-platform" && /Rosetta/.test(error.message));
+    assert.ok(listProcesses({ timeoutMs: 5000 }).some(row => row.pid === process.pid && row.identity));
+    assert.throws(() => listProcesses({ timeoutMs: 5000, includeCommand: true }), error => error.code === "unsupported-platform" && /Rosetta/.test(error.message));
     const worker = new Worker(new URL("./inspect-rosetta-worker.mjs", import.meta.url));
     const closed = once(worker, "exit");
     assert.deepEqual(await once(worker, "message"), ["verified"]);

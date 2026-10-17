@@ -83,7 +83,8 @@ measurements. FreeBSD uses system Node; there is no supported Bun binary for Fre
 Command [inspection](inspect.md) uses Darwin `KERN_PROCARGS2` and Windows PEB parameters,
 including WOW64 layouts. Bounds and returned lengths are validated in Rust. Only requested
 environment entries cross N-API. Windows memory reads use one retained process handle;
-Darwin checks translation in Rust and refuses Rosetta before reading argument data.
+Darwin arm64 builds need no translation check; x64 builds query translation in Rust
+and refuse Rosetta or an unreadable status before reading argument data.
 
 Windows census enumeration retains all observed PIDs within a 65,536-entry bound, including
 inaccessible and vanished rows. Each row uses one retained process object for validated token
@@ -92,13 +93,19 @@ budget checks and a final wrapper check reject expired calls without a partial r
 environment selection uses ordinal case-insensitive comparison and preserves requested casing.
 
 Darwin census uses the same PID-count bound and validates the caller, signs, and uniqueness
-before filtering requested PIDs. Short BSD records supply topology, effective UID, and state
+before filtering requested PIDs. Only selected PIDs receive per-process reads. Census
+without commands never queries translation status and works under Rosetta or a sandbox
+that denies that query. Short BSD records supply topology, effective UID, and state
 without requiring access to birth identity. The existing SDK kernel-record bridge supplies
 zombie topology when libproc returns ESRCH; only proven disappearance omits a PID. Birth-time
 brackets fence optional identity and command combinations against PID reuse. Both native
 monotonic budget checks and the wrapper reject expiry without returning a partial census.
 `scripts/darwin-census-proof.mjs` exercises root ownership, a setsid child, stopped state,
 unreaped zombie state, disappearance, PID selections, and native deadlines on main and Worker.
+`scripts/check-darwin-seatbelt.mjs` verifies a real `EPERM` from the translation sysctl
+(or its pre-existing absence on Intel kernels),
+then proves census and architecture-specific command behavior in that same sandbox on
+main and Worker with Node and Bun. The Rosetta CI step repeats the sandbox proof on x64.
 
 The root [`getProcSafeNativeStatus()`](native-status.md) entry defers the status and
 loader modules until called. Its default reads the cached loader outcome; an

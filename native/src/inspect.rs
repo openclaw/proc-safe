@@ -83,6 +83,13 @@ mod macos {
     use crate::error::io;
     use std::{ffi::c_void, mem::size_of};
 
+    #[cfg(target_arch = "aarch64")]
+    pub fn supported() -> Result<bool> {
+        // An arm64 image cannot run under Rosetta; sandboxes may deny the sysctl.
+        Ok(true)
+    }
+
+    #[cfg(target_arch = "x86_64")]
     pub fn supported() -> Result<bool> {
         let mut translated: i32 = 0;
         let mut size = size_of::<i32>();

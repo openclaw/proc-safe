@@ -3,7 +3,9 @@
 `@openclaw/proc-safe/inspect` reads a process's executable and exact argument boundaries
 on native Darwin arm64/x64 and Windows arm64/x64. The subpath imports on all platforms
 without loading native code. `isSupported()` never throws; it returns false on unsupported
-platforms, when the binding is unavailable or disabled, and under Rosetta.
+platforms, when the binding is unavailable or disabled, and when command inspection
+cannot establish native execution on x64 (including Rosetta or a denied translation query).
+Census without commands remains available in those x64 cases.
 
 ```ts
 import { readProcessCommand } from '@openclaw/proc-safe/inspect';
@@ -31,7 +33,9 @@ If XNU appends Apple startup metadata without a separating environment boundary,
 inspection with requested environment keys throws `incomplete`; metadata is never returned
 as an environment value. A `pfz=` entry at that aligned boundary is ambiguous even if
 a caller placed it in the environment. Rosetta is refused in Rust with `unsupported-platform` and a diagnostic recommending a
-native arm64 runtime. Native x64 on Intel is supported.
+native arm64 runtime. Native x64 on Intel is supported. Arm64 builds establish native
+execution from their compile target without querying `sysctl.proc_translated`. X64 builds
+query translation status; a denied query throws `access-denied` rather than guessing.
 
 Windows retains a process handle while reading the image path and PEB process parameters.
 It validates information lengths, PID, string lengths, pointer arithmetic, and both native
@@ -55,7 +59,7 @@ const observations = listProcesses({ timeoutMs: 5000, includeCommand: true });
 const sameOwner = observations.filter(row => row.owner === 'same');
 ```
 
-`listProcesses({ timeoutMs, includeCommand?, pids? })` supports native Darwin and Windows
+`listProcesses({ timeoutMs, includeCommand?, pids? })` supports Darwin and Windows
 arm64/x64. Linux and FreeBSD census calls throw `unsupported-platform`. It returns frozen
 `ProcessSnapshot` rows with `pid`, `owner` (`'same'`, `'different'`, or `'unknown'`), optional
 `parentPid`, optional `identity` (the existing `ProcessIdentity` type), and optional `command`.
@@ -80,7 +84,11 @@ proven gone PIDs are omitted. PID 0 is the kernel task and is excluded on Darwin
 Darwin birth identities bracket topology and optional command reads. If birth identity is
 unreadable or changes, the row retains only independently observed topology; it never combines
 a command with an unverified process instance. All observations can race with later changes;
-the census does not pin Darwin processes. Rosetta is unsupported, as for command inspection.
+the census does not pin Darwin processes. Without `includeCommand`, census reads kernel
+records independently of Rosetta status, including in sandboxes that deny
+`sysctl.proc_translated`. With `includeCommand: true`, command inspection requires native
+execution as above: Rosetta throws `unsupported-platform`, and a denied x64 translation
+query throws `access-denied` before enumeration.
 
 Windows leaves `processGroupId` and `state` absent and reports `parentPid` when its retained
 process observation supplies identity. It preserves inaccessible and vanished enumerated rows.

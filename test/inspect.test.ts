@@ -46,3 +46,8 @@ test.runIf(process.env.PROC_SAFE_NATIVE === "require" && process.platform === "d
   const output = execFileSync(process.execPath, ["scripts/darwin-census-proof.mjs"], { encoding: "utf8", timeout: 10_000 });
   expect(JSON.parse(output)).toMatchObject({ platform: "darwin", arch: process.arch, passed: 8 });
 });
+
+test.runIf(process.env.PROC_SAFE_NATIVE === "require" && process.platform === "darwin")("Darwin census survives Seatbelt translation-query denial on main and Worker", () => {
+  const output = execFileSync(process.execPath, ["scripts/check-darwin-seatbelt.mjs"], { encoding: "utf8", timeout: 10_000 });
+  expect(JSON.parse(output)).toMatchObject({ platform: "darwin", arch: process.arch, passed: 2 });
+});

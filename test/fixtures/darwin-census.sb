@@ -1,0 +1,4 @@
+(version 1)
+(allow default)
+; Mirror the production sandbox's denial without unrelated filesystem restrictions.
+(deny sysctl-read (sysctl-name "sysctl.proc_translated"))

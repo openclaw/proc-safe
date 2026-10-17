@@ -136,10 +136,10 @@ pub fn list(
         ));
     }
     budget.check()?;
-    if !macos::supported()? {
+    if include_command && !macos::supported()? {
         return Err(failure(
             "unsupported-platform",
-            "process census under Rosetta is unsupported; use native arm64 Node.js or Bun",
+            "process command inspection under Rosetta is unsupported; use native arm64 Node.js or Bun",
         ));
     }
     const PID_CAP: usize = 65_536;
