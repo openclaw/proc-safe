@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Darwin census rows for processes already exiting now report parentage, process group, owner, and state, so a concurrent exit no longer yields an incomplete row.
+
 ## 0.4.1 - 2026-10-17
 
 - Darwin census works in sandboxes that deny `sysctl.proc_translated`, including under Rosetta; native arm64 command inspection no longer requires that query.

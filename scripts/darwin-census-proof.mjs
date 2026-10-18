@@ -67,6 +67,44 @@ async function proveBoth(observation) {
   assert.deepEqual(await exited, [0]);
 }
 
+async function proveExiting(child, lines, pid) {
+  const selected = listProcesses({ timeoutMs: 5000, pids: [pid] });
+  const identity = readProcessIdentity(pid);
+  const fullRow = listProcesses({ timeoutMs: 5000 }).find(row => row.pid === pid);
+  // Recheck after both censuses so a sample that outlives the exit window cannot pass.
+  child.stdin.write("q");
+  const window = JSON.parse((await lines.next()).value);
+  const evidence = { selected, identity, fullRow, window };
+  try {
+    assert.equal(window.stillExiting, true, "censuses must finish inside the exit window");
+    assert.equal(window.libprocResult, 0);
+    assert.equal(window.libprocErrno, 3); // Darwin ESRCH.
+    assert.equal(window.state, 2); // XNU reports SRUN while the last pty close drains.
+    assert.notEqual(window.flags & 0x2000, 0); // P_WEXIT.
+    assert.ok(identity);
+    assert.equal(identity.parentPid, child.pid);
+    assert.equal(identity.exited, false);
+    assert.equal(selected.length, 1);
+    for (const row of [selected[0], fullRow]) {
+      assert.ok(row, "exiting child must remain in selected and full censuses");
+      assert.equal(row.pid, pid);
+      assert.equal(row.parentPid, child.pid, "exiting row must retain its parent PID");
+      assert.equal(row.processGroupId, pid);
+      assert.equal(row.owner, "same");
+      assert.equal(row.state, "running");
+      assert.ok(row.identity);
+      assert.equal(row.identity.parentPid, child.pid);
+      assert.equal(row.identity.exited, false);
+      assert.equal(Object.isFrozen(row), true);
+      assert.equal(Object.isFrozen(row.identity), true);
+    }
+  } catch (error) {
+    console.error("Exiting census evidence:", JSON.stringify(evidence));
+    throw error;
+  }
+  return window;
+}
+
 if (!isMainThread) {
   observe(workerData);
   parentPort.postMessage("verified");
@@ -88,13 +126,17 @@ if (!isMainThread) {
     child.stdin.write("s");
     assert.equal((await lines.next()).value, "stopped");
     await proveBoth({ pid, parentPid: child.pid, state: "stopped" });
+    child.stdin.write("e");
+    assert.equal((await lines.next()).value, "exiting");
+    const exiting = await proveExiting(child, lines, pid);
     child.stdin.write("z");
     assert.equal((await lines.next()).value, "zombie");
+    const timing = JSON.parse((await lines.next()).value);
     await proveBoth({ pid, parentPid: child.pid, state: "zombie" });
     child.stdin.end("r");
     assert.deepEqual(await closed, [0, null]);
     await proveBoth({ pid, parentPid: child.pid, state: "gone" });
-    console.log(JSON.stringify({ platform: process.platform, arch: process.arch, passed: 8 }));
+    console.log(JSON.stringify({ platform: process.platform, arch: process.arch, passed: 9, exiting: { ...exiting, ...timing } }));
   } finally {
     if (child && child.exitCode === null) {
       child.stdin.end();

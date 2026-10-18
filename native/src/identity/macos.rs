@@ -59,6 +59,7 @@ pub(crate) struct BsdIdentity {
     pub state: u32,
     pub process_group_id: u32,
     pub uid: u32,
+    pub exiting: u32,
 }
 
 unsafe extern "C" {

@@ -29,8 +29,8 @@ musl library names. Unknown libc attempts the GNU binding and fails explicitly i
 
 Darwin reads public proc_bsdinfo through libc's C layout on both arm64 and x64 and validates
 size, PID and timeval fields. Its ESRCH path checks `kern.proc.pid` using the SDK
-layout because libproc excludes zombies. This second observation distinguishes
-a retained zombie from a missing object. Coalitions use PROC_PIDCOALITIONINFO with exact returned-size
+layout because libproc excludes zombies and processes already exiting. This second observation
+distinguishes a retained object from a missing process. Coalitions use PROC_PIDCOALITIONINFO with exact returned-size
 checking. Private XPC symbols are resolved only while reading the optional name; all required
 symbols, dictionary type, and matching coalition ID are checked before consuming it.
 
@@ -97,11 +97,13 @@ before filtering requested PIDs. Only selected PIDs receive per-process reads. C
 without commands never queries translation status and works under Rosetta or a sandbox
 that denies that query. Short BSD records supply topology, effective UID, and state
 without requiring access to birth identity. The existing SDK kernel-record bridge supplies
-zombie topology when libproc returns ESRCH; only proven disappearance omits a PID. Birth-time
-brackets fence optional identity and command combinations against PID reuse. Both native
-monotonic budget checks and the wrapper reject expiry without returning a partial census.
+topology for zombies and processes already exiting when libproc returns ESRCH; only proven
+disappearance omits a PID. Birth-time brackets fence optional identity and command
+combinations against PID reuse. Both native monotonic budget checks and the wrapper reject
+expiry without returning a partial census.
 `scripts/darwin-census-proof.mjs` exercises root ownership, a setsid child, stopped state,
 unreaped zombie state, disappearance, PID selections, and native deadlines on main and Worker.
+It also verifies topology for an exiting process on main while the child's last pty close drains.
 `scripts/check-darwin-seatbelt.mjs` verifies a real `EPERM` from the translation sysctl
 (or its pre-existing absence on Intel kernels),
 then proves census and architecture-specific command behavior in that same sandbox on

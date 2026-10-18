@@ -70,12 +70,12 @@ fn topology(pid: u32, caller_uid: u32) -> Result<Option<ProcessSnapshot>> {
         let error = std::io::Error::last_os_error();
         match error.raw_os_error() {
             Some(libc::ESRCH) => {
-                // libproc hides zombies. Only the kernel record plus the existing
-                // absence check may distinguish a retained zombie from a gone PID.
+                // libproc hides zombies and processes already exiting. Only those
+                // kernel records, plus the absence check, may replace the short record.
                 let Some(kernel) = crate::identity::macos::read_kernel_info(pid)? else {
                     return Ok(None);
                 };
-                if kernel.state != libc::SZOMB {
+                if kernel.state != libc::SZOMB && kernel.exiting == 0 {
                     return Ok(Some(row));
                 }
                 (

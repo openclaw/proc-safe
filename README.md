@@ -151,7 +151,7 @@ Only the environment keys you name ever leave native code. On Darwin and Windows
 `listProcesses({ timeoutMs })` returns a complete census or throws — never a silently partial
 list — and accepts `pids` to inspect only selected processes. Rows keep unknown facts explicit (`owner: "unknown"`, no `identity`) instead of
 dropping protected processes. Darwin reports parent PID, process group, and kernel state
-independently of restricted birth identity, including foreign-owner topology and zombies.
+independently of restricted birth identity, including foreign-owner topology, zombies, and processes already exiting.
 Linux and FreeBSD census remains unsupported. [Command inspection and census](docs/inspect.md).
 
 ## Windows jobs

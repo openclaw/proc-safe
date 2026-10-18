@@ -78,8 +78,9 @@ records supply parentage, group, effective UID, and status independently of rest
 information. Owner comparison uses the caller's effective UID. A foreign-owner process can
 therefore have readable topology and `owner: 'different'` while `identity` stays absent.
 Denied short records retain the PID with unknown facts. The kernel-record mechanism resolves
-libproc's `ESRCH` for zombies and distinguishes retained objects from proven disappearance;
-proven gone PIDs are omitted. PID 0 is the kernel task and is excluded on Darwin.
+libproc's `ESRCH` for zombies and processes already exiting. It distinguishes retained objects
+from proven disappearance; proven gone PIDs are omitted. PID 0 is the kernel task and is
+excluded on Darwin.
 
 Darwin birth identities bracket topology and optional command reads. If birth identity is
 unreadable or changes, the row retains only independently observed topology; it never combines
