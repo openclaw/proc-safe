@@ -183,34 +183,34 @@ importers:
         version: 5.0.3(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5))
     optionalDependencies:
       '@openclaw/proc-safe-darwin-arm64':
-        specifier: 0.4.1
+        specifier: 0.4.2
         version: link:packages/darwin-arm64
       '@openclaw/proc-safe-darwin-x64':
-        specifier: 0.4.1
+        specifier: 0.4.2
         version: link:packages/darwin-x64
       '@openclaw/proc-safe-freebsd-arm64':
-        specifier: 0.4.1
+        specifier: 0.4.2
         version: link:packages/freebsd-arm64
       '@openclaw/proc-safe-freebsd-x64':
-        specifier: 0.4.1
+        specifier: 0.4.2
         version: link:packages/freebsd-x64
       '@openclaw/proc-safe-linux-arm64-gnu':
-        specifier: 0.4.1
+        specifier: 0.4.2
         version: link:packages/linux-arm64-gnu
       '@openclaw/proc-safe-linux-arm64-musl':
-        specifier: 0.4.1
+        specifier: 0.4.2
         version: link:packages/linux-arm64-musl
       '@openclaw/proc-safe-linux-x64-gnu':
-        specifier: 0.4.1
+        specifier: 0.4.2
         version: link:packages/linux-x64-gnu
       '@openclaw/proc-safe-linux-x64-musl':
-        specifier: 0.4.1
+        specifier: 0.4.2
         version: link:packages/linux-x64-musl
       '@openclaw/proc-safe-win32-arm64-msvc':
-        specifier: 0.4.1
+        specifier: 0.4.2
         version: link:packages/win32-arm64-msvc
       '@openclaw/proc-safe-win32-x64-msvc':
-        specifier: 0.4.1
+        specifier: 0.4.2
         version: link:packages/win32-x64-msvc
 
   native: {}

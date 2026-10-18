@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.2 - 2026-10-18
+
 - Darwin census rows for processes already exiting now report parentage, process group, owner, and state, so a concurrent exit no longer yields an incomplete row.
 - Darwin census omits a process that is reaped while its row is being read, instead of returning its topology without `identity`, so a concurrent exit is no longer indistinguishable from unreadable birth identity.
 

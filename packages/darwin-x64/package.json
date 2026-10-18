@@ -1,6 +1,6 @@
 {
   "name": "@openclaw/proc-safe-darwin-x64",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "darwin-x64 native binding for @openclaw/proc-safe.",
   "license": "MIT",
   "author": "OpenClaw Foundation (https://openclaw.org)",
