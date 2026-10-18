@@ -98,12 +98,15 @@ without commands never queries translation status and works under Rosetta or a s
 that denies that query. Short BSD records supply topology, effective UID, and state
 without requiring access to birth identity. The existing SDK kernel-record bridge supplies
 topology for zombies and processes already exiting when libproc returns ESRCH; only proven
-disappearance omits a PID. Birth-time brackets fence optional identity and command
-combinations against PID reuse. Both native monotonic budget checks and the wrapper reject
-expiry without returning a partial census.
+disappearance omits a PID, including disappearance proven by the trailing birth-identity read.
+Birth-time brackets fence optional identity and command combinations against PID reuse.
+Both native monotonic budget checks and the wrapper reject expiry without returning a
+partial census.
 `scripts/darwin-census-proof.mjs` exercises root ownership, a setsid child, stopped state,
 unreaped zombie state, disappearance, PID selections, and native deadlines on main and Worker.
 It also verifies topology for an exiting process on main while the child's last pty close drains.
+A Rust unit test reaps an unreaped zombie between its topology and trailing identity reads
+to prove that the row is omitted rather than reported without identity.
 `scripts/check-darwin-seatbelt.mjs` verifies a real `EPERM` from the translation sysctl
 (or its pre-existing absence on Intel kernels),
 then proves census and architecture-specific command behavior in that same sandbox on

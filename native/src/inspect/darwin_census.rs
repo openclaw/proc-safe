@@ -10,6 +10,16 @@ use std::{
     time::Instant,
 };
 
+#[cfg(test)]
+type Hook = Box<dyn FnMut(u32)>;
+
+#[cfg(test)]
+thread_local! {
+    /// Runs between a row's topology read and its trailing birth-identity read.
+    static BEFORE_TRAILING_IDENTITY: std::cell::RefCell<Option<Hook>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 struct Budget {
     started: Instant,
     timeout_ms: f64,
@@ -190,7 +200,18 @@ pub fn list(
                 row.command = macos::read(pid, &[]).ok().flatten();
                 budget.check()?;
             }
-            let after = read_process_identity(pid).ok().flatten();
+            #[cfg(test)]
+            BEFORE_TRAILING_IDENTITY.with_borrow_mut(|hook| {
+                if let Some(hook) = hook {
+                    hook(pid);
+                }
+            });
+            // Proven absence omits the row, as it would during topology; only an
+            // unreadable or changed identity keeps the topology read alone.
+            let after = match read_process_identity(pid) {
+                Ok(None) => continue,
+                after => after.ok().flatten(),
+            };
             budget.check()?;
             // Darwin has no retained process handle. Bracket all combined facts
             // with birth identity; otherwise retain only the single topology read.
@@ -208,4 +229,53 @@ pub fn list(
     }
     budget.check()?;
     Ok(rows)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::{Child, Command};
+
+    /// Waits for exit without reaping, so the child stays a zombie until `wait`.
+    fn zombie() -> Child {
+        let child = Command::new("/usr/bin/true").spawn().unwrap();
+        let mut info: libc::siginfo_t = unsafe { zeroed() };
+        while unsafe {
+            libc::waitid(
+                libc::P_PID,
+                child.id(),
+                &mut info,
+                libc::WEXITED | libc::WNOWAIT,
+            )
+        } != 0
+        {
+            let error = std::io::Error::last_os_error();
+            assert_eq!(error.raw_os_error(), Some(libc::EINTR), "{error}");
+        }
+        child
+    }
+
+    #[test]
+    fn omits_a_row_reaped_before_its_trailing_identity_read() {
+        let child = zombie();
+        let pid = child.id();
+        let rows = list(5000.0, false, Some(vec![pid])).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].state.as_deref(), Some("zombie"));
+        assert!(rows[0].identity.as_ref().is_some_and(|row| row.exited));
+
+        let mut child = Some(child);
+        BEFORE_TRAILING_IDENTITY.set(Some(Box::new(move |observed| {
+            assert_eq!(observed, pid);
+            child.take().unwrap().wait().unwrap();
+        })));
+        let rows = list(5000.0, false, Some(vec![pid]));
+        let hook = BEFORE_TRAILING_IDENTITY.take();
+        assert!(hook.is_some());
+        assert_eq!(read_process_identity(pid).unwrap().map(|row| row.pid), None);
+        assert!(
+            rows.unwrap().is_empty(),
+            "a reaped PID must not keep bare topology"
+        );
+    }
 }

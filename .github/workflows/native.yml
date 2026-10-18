@@ -42,6 +42,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm native:build
+      - name: Darwin-only Rust unit tests
+        if: runner.os == 'macOS' && matrix.node == 24
+        run: cargo test --workspace --locked
       - name: Prepare real systemd user-manager proof
         if: runner.os == 'Linux'
         run: |

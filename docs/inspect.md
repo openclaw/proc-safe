@@ -84,9 +84,10 @@ excluded on Darwin.
 
 Darwin birth identities bracket topology and optional command reads. If birth identity is
 unreadable or changes, the row retains only independently observed topology; it never combines
-a command with an unverified process instance. All observations can race with later changes;
-the census does not pin Darwin processes. Without `includeCommand`, census reads kernel
-records independently of Rosetta status, including in sandboxes that deny
+a command with an unverified process instance. If the trailing identity read proves the process
+gone, the row is omitted like any other proven disappearance. All observations can race with
+later changes; the census does not pin Darwin processes. Without `includeCommand`, census
+reads kernel records independently of Rosetta status, including in sandboxes that deny
 `sysctl.proc_translated`. With `includeCommand: true`, command inspection requires native
 execution as above: Rosetta throws `unsupported-platform`, and a denied x64 translation
 query throws `access-denied` before enumeration.
