@@ -1,30 +1,39 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { afterAll, beforeAll, expect, test } from "vitest";
+
+function gitIn(cwd: string, ...args: string[]) {
+  execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgSign=false", "-c", "tag.gpgSign=false", ...args],
+    { cwd, stdio: "pipe", env: { ...process.env, GIT_AUTHOR_NAME: "Release Fixture",
+      GIT_AUTHOR_EMAIL: "fixture@example.invalid", GIT_COMMITTER_NAME: "Release Fixture",
+      GIT_COMMITTER_EMAIL: "fixture@example.invalid" } });
+}
+
+let template: string;
+beforeAll(() => {
+  template = mkdtempSync(join(tmpdir(), "proc-safe-release-template-"));
+  mkdirSync(join(template, "scripts"));
+  mkdirSync(join(template, "native"));
+  writeFileSync(join(template, "package.json"), JSON.stringify({ type: "module", version: "1.2.3" }));
+  writeFileSync(join(template, "native/package.json"), JSON.stringify({ version: "1.2.3" }));
+  writeFileSync(join(template, "native/Cargo.toml"), '[package]\nversion = "1.2.3"\n');
+  copyFileSync(new URL("../scripts/validate-release.mjs", import.meta.url), join(template, "scripts/validate-release.mjs"));
+  writeFileSync(join(template, "scripts/native-targets.mjs"), "export const nativeTargets = []; export const nativePackageDirectory = () => {};\n");
+  writeFileSync(join(template, "scripts/release-notes.mjs"), "// Notes validation is independent of source admission.\n");
+  gitIn(template, "init", "-b", "main");
+  gitIn(template, "add", ".");
+  gitIn(template, "commit", "-m", "fixture");
+  gitIn(template, "update-ref", "refs/remotes/origin/main", "HEAD");
+});
+afterAll(() => rmSync(template, { recursive: true, force: true }));
 
 function fixture(check: (cwd: string, git: (...args: string[]) => void) => void) {
   const cwd = mkdtempSync(join(tmpdir(), "proc-safe-release-"));
-  const git = (...args: string[]) => {
-    execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgSign=false", "-c", "tag.gpgSign=false", ...args],
-      { cwd, stdio: "pipe" });
-  };
   try {
-    mkdirSync(join(cwd, "scripts"));
-    mkdirSync(join(cwd, "native"));
-    writeFileSync(join(cwd, "package.json"), JSON.stringify({ type: "module", version: "1.2.3" }));
-    writeFileSync(join(cwd, "native/package.json"), JSON.stringify({ version: "1.2.3" }));
-    writeFileSync(join(cwd, "native/Cargo.toml"), '[package]\nversion = "1.2.3"\n');
-    copyFileSync(new URL("../scripts/validate-release.mjs", import.meta.url), join(cwd, "scripts/validate-release.mjs"));
-    writeFileSync(join(cwd, "scripts/native-targets.mjs"), "export const nativeTargets = []; export const nativePackageDirectory = () => {};\n");
-    writeFileSync(join(cwd, "scripts/release-notes.mjs"), "// Notes validation is independent of source admission.\n");
-    git("init", "-b", "main");
-    git("config", "user.name", "Release Fixture");
-    git("config", "user.email", "fixture@example.invalid");
-    git("add", ".");
-    git("commit", "-m", "fixture");
-    git("update-ref", "refs/remotes/origin/main", "HEAD");
+    cpSync(template, cwd, { recursive: true });
+    const git = (...args: string[]) => gitIn(cwd, ...args);
     check(cwd, git);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
@@ -40,9 +49,8 @@ function validate(cwd: string, overrides: Record<string, string> = {}) {
   });
 }
 
-test("release dry run admits current main without creating a tag", () => fixture((cwd, git) => {
+test("release dry run admits current main without creating a tag", () => fixture(cwd => {
   expect(validate(cwd).status).toBe(0);
-  git("show-ref", "--verify", "refs/remotes/origin/main");
   expect(spawnSync("git", ["tag", "--list"], { cwd, encoding: "utf8" }).stdout).toBe("");
 }));
 
