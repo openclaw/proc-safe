@@ -2,7 +2,6 @@
 
 ## Unreleased
 
-- Add a release dry run that validates current main, builds and tests all native packages, and assembles artifacts without creating tags or publishing.
 ## 0.4.2 - 2026-10-19
 
 - Darwin census handles concurrent exits: processes already exiting report parentage, process group, owner, and state instead of an incomplete row, and a process reaped while its row is read is omitted instead of returned without `identity`.
