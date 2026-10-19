@@ -1,7 +1,18 @@
 name: Release
+run-name: ${{ inputs.dry_run && 'Dry run' || 'Release' }} ${{ inputs.version || github.ref_name }}
 on:
   push:
     tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Current package version to validate without publishing
+        type: string
+        required: true
+      dry_run:
+        description: Build and verify all packages without tags or publication
+        type: boolean
+        default: true
 permissions:
   contents: read
 concurrency:
@@ -10,7 +21,7 @@ concurrency:
 jobs:
   validate:
     name: Validate release source
-    if: github.ref_protected
+    if: github.ref_protected || (github.event_name == 'workflow_dispatch' && inputs.dry_run)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -23,7 +34,8 @@ jobs:
       - run: git fetch --no-tags origin main
       - run: node scripts/validate-release.mjs
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: cargo test --workspace --locked
@@ -57,6 +69,7 @@ jobs:
           retention-days: 7
   draft-release:
     name: Create draft GitHub Release
+    if: github.event_name != 'workflow_dispatch'
     needs: collect
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -130,9 +143,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-15
+          - os: xcode-27
             arch: arm64
-          - os: macos-15-intel
+          # Public command-inspection smoke needs a native Intel kernel, not Rosetta.
+          - os: macos-26-intel
             arch: x64
           - os: ubuntu-latest
             arch: x64
@@ -159,6 +173,7 @@ jobs:
         run: node scripts/installed-smoke.mjs "${RELEASE_TAG#v}" --bun
   release:
     name: Promote verified GitHub Release
+    if: github.event_name != 'workflow_dispatch'
     needs: [verify-registry, installed-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 10

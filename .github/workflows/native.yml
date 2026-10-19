@@ -21,11 +21,14 @@ jobs:
             os: ubuntu-24.04-arm
             arch: arm64
           - label: darwin-x64
-            os: macos-15-intel
+            # Native Intel command inspection is intentionally unsupported under Rosetta.
+            os: macos-26-intel
             arch: x64
+            macos-minimum: '10.12'
           - label: darwin-arm64
-            os: macos-15
+            os: xcode-27
             arch: arm64
+            macos-minimum: '11.0'
           - label: win32-x64-msvc
             os: windows-latest
             arch: x64
@@ -41,7 +44,15 @@ jobs:
         run: node -e "if(process.arch !== '${{ matrix.arch }}') throw new Error('wrong runner architecture')"
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      - name: Preserve native macOS deployment targets
+        if: runner.os == 'macOS'
+        run: echo 'MACOSX_DEPLOYMENT_TARGET=${{ matrix.macos-minimum }}' >> "$GITHUB_ENV"
       - run: pnpm native:build
+      - name: Verify native macOS minimum
+        if: runner.os == 'macOS'
+        run: |
+          minimum=$(otool -l native/proc-safe-native.darwin-${{ matrix.arch }}.node | awk '/LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX/ { found = 1; next } found && ($1 == "minos" || $1 == "version") { print $2; exit }')
+          test "$minimum" = '${{ matrix.macos-minimum }}'
       - name: Darwin-only Rust unit tests
         if: runner.os == 'macOS' && matrix.node == 24
         run: cargo test --workspace --locked
@@ -82,11 +93,15 @@ jobs:
       - name: Real Rosetta census and command refusal on main and Worker
         if: matrix.label == 'darwin-arm64'
         run: |
+          if ! arch -x86_64 /usr/bin/true; then
+            sudo softwareupdate --install-rosetta --agree-to-license
+          fi
+          arch -x86_64 /usr/bin/true
           node_version="$(node --version)"
           curl --fail --location "https://nodejs.org/dist/${node_version}/node-${node_version}-darwin-x64.tar.gz" -o "$RUNNER_TEMP/node-x64.tar.gz"
           tar -xzf "$RUNNER_TEMP/node-x64.tar.gz" -C "$RUNNER_TEMP"
           rustup target add x86_64-apple-darwin
-          node scripts/build-native.mjs x86_64-apple-darwin
+          MACOSX_DEPLOYMENT_TARGET=10.12 node scripts/build-native.mjs x86_64-apple-darwin
           arch -x86_64 "$RUNNER_TEMP/node-${node_version}-darwin-x64/bin/node" scripts/inspect-proof.mjs --rosetta
           arch -x86_64 "$RUNNER_TEMP/node-${node_version}-darwin-x64/bin/node" scripts/check-darwin-seatbelt.mjs
           curl --fail --location "https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-darwin-x64.zip" -o "$RUNNER_TEMP/bun-x64.zip"

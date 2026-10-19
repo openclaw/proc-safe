@@ -40,7 +40,7 @@ Leave clean synchronized main and follow the repository's Unreleased convention.
 
 After all eleven public packages are published and cryptographically verified, fresh consumer
 directories install the exact root version from `https://registry.npmjs.org`. This gate runs on
-macos-15 (ARM64), macos-15-intel, ubuntu-latest, ubuntu-24.04-arm, windows-latest, and
+xcode-27 (ARM64), macos-26-intel, ubuntu-latest, ubuntu-24.04-arm, windows-latest, and
 windows-11-arm. Each runner checks its architecture and the exact matching native package,
 imports every exported subpath, and runs supported read-only calls with default optional
 settings on Node 24 and Bun, both on the main thread and in a Worker. It includes a full default
@@ -60,3 +60,13 @@ Native CI also runs this smoke against its local root and platform tarballs on e
 `node scripts/installed-smoke.mjs X.Y.Z --bun --tarballs root.tgz platform.tgz`.
 FreeBSD uses Node only, as in the existing runtime proof. Local tarballs install once, with no
 retry; the public release gate always uses the registry path.
+
+The Intel runner is required for the native x64 command-inspection contract: Rosetta
+deliberately reports that capability as unsupported. ARM64 CI separately verifies that refusal.
+Native addon deployment targets remain macOS 10.12 for x64 and macOS 11.0 for ARM64;
+Node.js keeps its own supported operating-system requirements.
+
+To build and verify all release packages on current main without creating a tag or
+publishing, dispatch `release.yml` with the current package `version` and `dry_run=true`.
+Manual runs reject publication and non-main source. The dry run includes all native
+runtime and local installed-package checks, then assembles the complete package set.
