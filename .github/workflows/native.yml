@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [22, 24]
+        node: ["22.23.4", "24.22.1"]
         label: [linux-x64-gnu, linux-arm64-gnu, darwin-x64, darwin-arm64, win32-x64-msvc, win32-arm64-msvc]
         include:
           - label: linux-x64-gnu
@@ -54,7 +54,7 @@ jobs:
           minimum=$(otool -l native/proc-safe-native.darwin-${{ matrix.arch }}.node | awk '/LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX/ { found = 1; next } found && ($1 == "minos" || $1 == "version") { print $2; exit }')
           test "$minimum" = '${{ matrix.macos-minimum }}'
       - name: Darwin-only Rust unit tests
-        if: runner.os == 'macOS' && matrix.node == 24
+        if: runner.os == 'macOS' && matrix.node == '24.22.1'
         run: cargo test --workspace --locked
       - name: Prepare real systemd user-manager proof
         if: runner.os == 'Linux'
@@ -134,7 +134,7 @@ jobs:
       - run: pnpm benchmark:imports
       - run: bun scripts/benchmark-imports.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        if: matrix.node == 24
+        if: matrix.node == '24.22.1'
         with:
           name: binding-${{ matrix.label }}
           path: native/*.node
@@ -146,7 +146,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [22, 24]
+        node: ["22.23.4", "24.22.1"]
         label: [linux-x64-musl, linux-arm64-musl]
         include:
           - label: linux-x64-musl
@@ -159,10 +159,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Build and execute on musl
         env:
-          NODE_MAJOR: ${{ matrix.node }}
+          NODE_VERSION: ${{ matrix.node }}
           EXPECTED_ARCH: ${{ matrix.arch }}
         run: |
-          docker run --rm -e EXPECTED_ARCH -v "$PWD:/work" -w /work "node:${NODE_MAJOR}-alpine" sh -euxc '
+          docker run --rm -e EXPECTED_ARCH -v "$PWD:/work" -w /work "node:${NODE_VERSION}-alpine" sh -euxc '
             apk add --no-cache build-base curl unzip bash git
             curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
             export PATH="$HOME/.cargo/bin:$PATH"
@@ -186,7 +186,7 @@ jobs:
             bun scripts/benchmark-imports.mjs
           '
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        if: matrix.node == 24
+        if: matrix.node == '24.22.1'
         with:
           name: binding-${{ matrix.label }}
           path: native/*.node
@@ -198,9 +198,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [22, 24]
+        node: ["22.23.4", "24.22.1"]
         cpu: [x64, arm64]
         include:
+          - node: "22.23.4"
+            node-major: 22
+          - node: "24.22.1"
+            node-major: 24
           - cpu: x64
             arch: x86_64
           - cpu: arm64
@@ -221,7 +225,7 @@ jobs:
           release: '14.4'
           arch: ${{ matrix.arch }}
           usesh: true
-          prepare: pkg install -y node${{ matrix.node }} npm-node${{ matrix.node }} rust gmake
+          prepare: pkg install -y node${{ matrix.node-major }} npm-node${{ matrix.node-major }} rust gmake
           run: |
             set -eu
             node -e "if(process.platform !== 'freebsd' || process.arch !== '${{ matrix.cpu }}') throw new Error('wrong runtime')"
@@ -232,7 +236,7 @@ jobs:
             node scripts/check-restricted-visibility.mjs
             node scripts/benchmark-imports.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        if: matrix.node == 24
+        if: matrix.node == '24.22.1'
         with:
           name: binding-freebsd-${{ matrix.cpu }}
           path: native/*.node
