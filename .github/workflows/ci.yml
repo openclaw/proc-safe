@@ -18,13 +18,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca
   typescript:
-    name: TypeScript checks (Node ${{ matrix.node }})
+    name: TypeScript checks (Node ${{ matrix.node-major }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         node: ["22.23.4", "24.22.1"]
+        include:
+          - node: "22.23.4"
+            node-major: 22
+          - node: "24.22.1"
+            node-major: 24
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: ./.github/actions/setup-node-pnpm

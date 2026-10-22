@@ -5,7 +5,7 @@ permissions:
   contents: read
 jobs:
   runtime:
-    name: Native (${{ matrix.label }}, Node ${{ matrix.node }})
+    name: Native (${{ matrix.label }}, Node ${{ matrix.node-major }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
     strategy:
@@ -14,6 +14,10 @@ jobs:
         node: ["22.23.4", "24.22.1"]
         label: [linux-x64-gnu, linux-arm64-gnu, darwin-x64, darwin-arm64, win32-x64-msvc, win32-arm64-msvc]
         include:
+          - node: "22.23.4"
+            node-major: 22
+          - node: "24.22.1"
+            node-major: 24
           - label: linux-x64-gnu
             os: ubuntu-latest
             arch: x64
@@ -140,7 +144,7 @@ jobs:
           path: native/*.node
           if-no-files-found: error
   musl:
-    name: Native (${{ matrix.label }}, Node ${{ matrix.node }})
+    name: Native (${{ matrix.label }}, Node ${{ matrix.node-major }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
     strategy:
@@ -149,6 +153,10 @@ jobs:
         node: ["22.23.4", "24.22.1"]
         label: [linux-x64-musl, linux-arm64-musl]
         include:
+          - node: "22.23.4"
+            node-major: 22
+          - node: "24.22.1"
+            node-major: 24
           - label: linux-x64-musl
             os: ubuntu-latest
             arch: x64
@@ -193,7 +201,7 @@ jobs:
           path: native/*.node
           if-no-files-found: error
   freebsd:
-    name: Native (freebsd-${{ matrix.cpu }}, Node ${{ matrix.node }})
+    name: Native (freebsd-${{ matrix.cpu }}, Node ${{ matrix.node-major }})
     runs-on: ubuntu-latest
     timeout-minutes: 35
     strategy:
