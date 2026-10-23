@@ -163,7 +163,7 @@ jobs:
           node-version: 24.22.1
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.4
       - name: Verify real runner architecture
         run: node -e "if(process.arch !== '${{ matrix.arch }}') throw new Error('wrong runner architecture')"
       - name: Fresh public-registry install and default calls on Node and Bun

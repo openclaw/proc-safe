@@ -78,7 +78,7 @@ jobs:
         run: pnpm test --fileParallelism=${{ runner.os != 'Windows' }}
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.4
       - name: Native Bun contracts and main/Worker proof
         env:
           PROC_SAFE_NATIVE: require
@@ -108,7 +108,7 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET=10.12 node scripts/build-native.mjs x86_64-apple-darwin
           arch -x86_64 "$RUNNER_TEMP/node-${node_version}-darwin-x64/bin/node" scripts/inspect-proof.mjs --rosetta
           arch -x86_64 "$RUNNER_TEMP/node-${node_version}-darwin-x64/bin/node" scripts/check-darwin-seatbelt.mjs
-          curl --fail --location "https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-darwin-x64.zip" -o "$RUNNER_TEMP/bun-x64.zip"
+          curl --fail --location "https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-darwin-x64.zip" -o "$RUNNER_TEMP/bun-x64.zip"
           unzip -q "$RUNNER_TEMP/bun-x64.zip" -d "$RUNNER_TEMP/bun-x64"
           arch -x86_64 "$RUNNER_TEMP/bun-x64/bun-darwin-x64/bun" scripts/check-darwin-seatbelt.mjs
           # The Intel runtime lane owns the published x64 artifact.
@@ -186,7 +186,7 @@ jobs:
             pnpm package:smoke
             bun_arch="$EXPECTED_ARCH"
             if [ "$bun_arch" = arm64 ]; then bun_arch=aarch64; fi
-            curl -fL "https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-linux-${bun_arch}-musl.zip" -o /tmp/bun.zip
+            curl -fL "https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-linux-${bun_arch}-musl.zip" -o /tmp/bun.zip
             unzip /tmp/bun.zip -d /tmp/bun
             cp /tmp/bun/*/bun /usr/local/bin/bun
             node scripts/installed-smoke.mjs "$(node -p '\''require("./package.json").version'\'')" --bun --tarballs release-artifacts/*.tgz
