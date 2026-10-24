@@ -110,12 +110,12 @@ if (!isMainThread) {
   parentPort.postMessage("verified");
 } else {
   assert.equal(process.platform, "darwin");
-  const directory = mkdtempSync(join(tmpdir(), "proc-safe-census-"));
+  const directory = process.argv[2] ? undefined : mkdtempSync(join(tmpdir(), "proc-safe-census-"));
   let child;
   let closed;
   try {
-    const executable = join(directory, "census-child");
-    execFileSync("cc", [fileURLToPath(new URL("../test/fixtures/darwin-census.c", import.meta.url)), "-o", executable]);
+    const executable = process.argv[2] ?? join(directory, "census-child");
+    if (directory) execFileSync("cc", [fileURLToPath(new URL("../test/fixtures/darwin-census.c", import.meta.url)), "-o", executable]);
     child = spawn(executable, [], { stdio: ["pipe", "pipe", "inherit"] });
     closed = once(child, "close");
     const lines = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
@@ -142,6 +142,6 @@ if (!isMainThread) {
       child.stdin.end();
       await closed;
     }
-    rmSync(directory, { recursive: true, force: true });
+    if (directory) rmSync(directory, { recursive: true, force: true });
   }
 }

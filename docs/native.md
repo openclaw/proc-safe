@@ -105,6 +105,8 @@ partial census.
 `scripts/darwin-census-proof.mjs` exercises root ownership, a setsid child, stopped state,
 unreaped zombie state, disappearance, PID selections, and native deadlines on main and Worker.
 It also verifies topology for an exiting process on main while the child's last pty close drains.
+The Vitest wrapper compiles that fixture in suite setup and passes its executable to the proof,
+so compiler and SDK startup do not consume the unchanged five-second test deadline.
 A Rust unit test reaps an unreaped zombie between its topology and trailing identity reads
 to prove that the row is omitted rather than reported without identity.
 `scripts/check-darwin-seatbelt.mjs` verifies a real `EPERM` from the translation sysctl

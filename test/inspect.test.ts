@@ -1,6 +1,23 @@
 import { execFileSync } from "node:child_process";
-import { test, expect } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, beforeAll, test, expect } from "vitest";
 import { readProcessCommand, listProcesses } from "../src/inspect.js";
+
+const nativeDarwin = process.env.PROC_SAFE_NATIVE === "require" && process.platform === "darwin";
+let censusDirectory: string | undefined;
+
+beforeAll(() => {
+  if (!nativeDarwin) return;
+  censusDirectory = mkdtempSync(join(tmpdir(), "proc-safe-census-test-"));
+  // Cold compiler/SDK startup is fixture setup, not part of the census deadline.
+  execFileSync("cc", ["test/fixtures/darwin-census.c", "-o", join(censusDirectory, "census-child")]);
+});
+
+afterAll(() => {
+  if (censusDirectory) rmSync(censusDirectory, { recursive: true, force: true });
+});
 
 test.each([0, -1, 1.2, NaN, Infinity, 0x1_0000_0000])("inspection rejects invalid PID %s", pid => {
   expect(() => readProcessCommand(pid)).toThrow(expect.objectContaining({ code: "invalid-argument" }));
@@ -42,8 +59,8 @@ test("census supports Darwin and Windows", () => {
   }
 });
 
-test.runIf(process.env.PROC_SAFE_NATIVE === "require" && process.platform === "darwin")("real Darwin census and Worker boundaries", () => {
-  const output = execFileSync(process.execPath, ["scripts/darwin-census-proof.mjs"], { encoding: "utf8", timeout: 10_000 });
+test.runIf(nativeDarwin)("real Darwin census and Worker boundaries", () => {
+  const output = execFileSync(process.execPath, ["scripts/darwin-census-proof.mjs", join(censusDirectory!, "census-child")], { encoding: "utf8", timeout: 10_000 });
   expect(JSON.parse(output)).toMatchObject({ platform: "darwin", arch: process.arch, passed: 9, exiting: { stillExiting: true, state: 2 } });
 });
 
