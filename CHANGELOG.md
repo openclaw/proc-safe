@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Harden build and release downloads against compromised CA keys with patched Node, pnpm, Bun, and Alpine system trust stores. Thanks @joshavant.
+
 ## 0.4.2 - 2026-10-19
 
 - Darwin census handles concurrent exits: processes already exiting report parentage, process group, owner, and state instead of an incomplete row, and a process reaped while its row is read is omitted instead of returned without `identity`.
