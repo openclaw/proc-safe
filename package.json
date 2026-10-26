@@ -103,23 +103,23 @@
     "benchmark:imports": "node scripts/benchmark-imports.mjs"
   },
   "optionalDependencies": {
-    "@openclaw/proc-safe-linux-x64-gnu": "0.4.2",
-    "@openclaw/proc-safe-linux-x64-musl": "0.4.2",
+    "@openclaw/proc-safe-darwin-arm64": "0.4.2",
+    "@openclaw/proc-safe-darwin-x64": "0.4.2",
+    "@openclaw/proc-safe-freebsd-arm64": "0.4.2",
+    "@openclaw/proc-safe-freebsd-x64": "0.4.2",
     "@openclaw/proc-safe-linux-arm64-gnu": "0.4.2",
     "@openclaw/proc-safe-linux-arm64-musl": "0.4.2",
-    "@openclaw/proc-safe-darwin-x64": "0.4.2",
-    "@openclaw/proc-safe-darwin-arm64": "0.4.2",
-    "@openclaw/proc-safe-win32-x64-msvc": "0.4.2",
+    "@openclaw/proc-safe-linux-x64-gnu": "0.4.2",
+    "@openclaw/proc-safe-linux-x64-musl": "0.4.2",
     "@openclaw/proc-safe-win32-arm64-msvc": "0.4.2",
-    "@openclaw/proc-safe-freebsd-x64": "0.4.2",
-    "@openclaw/proc-safe-freebsd-arm64": "0.4.2"
+    "@openclaw/proc-safe-win32-x64-msvc": "0.4.2"
   },
   "devDependencies": {
-    "@napi-rs/cli": "3.10.8",
+    "@napi-rs/cli": "3.10.9",
     "@types/node": "^26.6.5",
     "sigstore": "5.0.0",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.5"
   },
   "engines": {
     "node": ">=22"
