@@ -58,7 +58,13 @@ identifies zombies. Visibility denial can also return ESRCH. A cached policy sna
 that means absence or `access-denied` with a `visibility-policy` reason. Policy
 read failures are restricted. See [identity and visibility](identity.md).
 
-FreeBSD CI uses 14.4. Dependencies and TypeScript output are prepared on Linux and
+FreeBSD CI uses 14.4. Its major-line pkg installation must pass runtime admission
+before native proof: the actual Node executable must match the guest platform,
+architecture, selected major, and patched matrix floor (22.23.4 or 24.22.1).
+Newer stable patches in that selected major are accepted and the actual identity
+is logged. An older package fails with pkg-upgrade guidance; a matrix label alone
+is not evidence of the installed patch.
+Dependencies and TypeScript output are prepared on Linux and
 synced into the VM; Cargo builds the addon under the FreeBSD kernel. The portable
 native suite runs directly with Node, including the unreaped-zombie test and real
 Workers, followed by a root-only npm consumer install. ARM64 CPU execution uses
