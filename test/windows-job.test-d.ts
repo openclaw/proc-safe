@@ -15,3 +15,17 @@ if (member) WindowsJob.create().assignProcess(member);
 PinnedProcess.open(123, { imagePath: "example.exe" });
 // @ts-expect-error only named capability modes are accepted
 PinnedProcess.open(123, { access: "all" });
+
+
+const job = WindowsJob.create();
+const child = job.spawn({ executable: "example.exe", commandLine: "example.exe", stdin: "pipe" });
+const accepted: number | null = child.writeStdin(Buffer.from("synthetic-input"));
+void accepted;
+child.closeStdin();
+job.spawn({ executable: "example.exe", commandLine: "example.exe", stdin: "null" });
+// @ts-expect-error no inherited stdin capability
+job.spawn({ executable: "example.exe", commandLine: "example.exe", stdin: "inherit" });
+// @ts-expect-error only Buffer input; empty Buffers are rejected at runtime
+child.writeStdin("synthetic-input");
+// @ts-expect-error raw Uint8Array is not the input contract
+child.writeStdin(new Uint8Array([1]));

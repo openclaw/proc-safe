@@ -11,8 +11,14 @@ It caches load attempts, never starts child processes, and never downloads or co
 
 Windows jobs live in `windows_job.rs`. Native owners close job, process, and pipe handles;
 JavaScript never receives numeric handles. Child creation supplies both JOB_LIST and
-HANDLE_LIST to CreateProcessW, so admission precedes execution and only NUL stdin and
-the two output writers are inherited. Each pipe has one reader: a peek followed by a read
+HANDLE_LIST to CreateProcessW, so admission precedes execution and only the selected stdin
+reader (NUL by default) and the two output writers are inherited. Opt-in private input uses
+a local byte-mode named pipe: a non-inheritable NOWAIT server writer makes one bounded
+write attempt and reports its accepted prefix, while the child reader keeps blocking read semantics.
+The system cryptographic RNG supplies an unpredictable name; first-instance protection,
+remote-client rejection, and creator-PID validation precede exposing the writer. No background
+I/O owns a borrowed JavaScript buffer. The native child owner closes the writer on explicit
+input close, child close, or finalization. Root exit does not decide stream state. Each pipe has one reader: a peek followed by a read
 bounded to the available bytes cannot wait for a writer. Root exit, pipe EOF, and job
 extinction are separate observations. Pinned processes reuse identity's handle-based reader.
 Their intended access mode determines the exact OpenProcess rights. Native mode checks

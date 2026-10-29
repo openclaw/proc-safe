@@ -10,7 +10,7 @@ if (target.libc === "musl") env.RUSTFLAGS = `${env.RUSTFLAGS ?? ""} -C target-fe
 execFileSync("cargo", ["build", "--workspace", "--locked", "--release", "--no-default-features", "--target", target.rust], { cwd: root, stdio: "inherit", env });
 const library = target.os === "win32" ? "proc_safe_native.dll" : target.os === "darwin" ? "libproc_safe_native.dylib" : "libproc_safe_native.so";
 const source = new URL(`target/${target.rust}/release/${library}`, root);
-if (["failNextWindowsJobAssignment", "openWindowsPinWithoutDebug"].some(name => readFileSync(source).includes(Buffer.from(name)))) {
+if (["failNextWindowsJobAssignment", "openWindowsPinWithoutDebug", "interceptNextWindowsJobInput"].some(name => readFileSync(source).includes(Buffer.from(name)))) {
   throw new Error("Refusing to stage a fault-injection addon in a platform package");
 }
 copyFileSync(source, new URL(`native/${target.artifact}`, root));

@@ -4,7 +4,7 @@ fn main() {}
 #[cfg(windows)]
 fn main() {
     use std::{
-        io::{self, BufRead, Write},
+        io::{self, BufRead, Read, Write},
         ptr::null,
         thread,
         time::Duration,
@@ -15,6 +15,145 @@ fn main() {
     };
     let args: Vec<String> = std::env::args().collect();
     match args[1].as_str() {
+        "competing-stdin" => {
+            use std::{os::windows::ffi::OsStrExt, ptr::null_mut};
+            use windows_sys::Win32::Storage::FileSystem::{
+                CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_GENERIC_READ, OPEN_EXISTING, ReadFile,
+            };
+            let name: Vec<u16> = std::ffi::OsStr::new(&args[2])
+                .encode_wide()
+                .chain(Some(0))
+                .collect();
+            let pipe = unsafe {
+                CreateFileW(
+                    name.as_ptr(),
+                    FILE_GENERIC_READ,
+                    0,
+                    null(),
+                    OPEN_EXISTING,
+                    FILE_ATTRIBUTE_NORMAL,
+                    null_mut(),
+                )
+            };
+            if pipe.is_null() || pipe == INVALID_HANDLE_VALUE {
+                println!("connection-failed {}", unsafe { GetLastError() });
+                io::stdout().flush().unwrap();
+                std::process::exit(1);
+            }
+            println!("connected");
+            io::stdout().flush().unwrap();
+            let mut byte = 0u8;
+            let mut count = 0u32;
+            let ok = unsafe {
+                ReadFile(
+                    pipe,
+                    (&mut byte as *mut u8).cast(),
+                    1,
+                    &mut count,
+                    null_mut(),
+                )
+            };
+            let error = if ok == 0 {
+                unsafe { GetLastError() }
+            } else {
+                0
+            };
+            unsafe { CloseHandle(pipe) };
+            let outcome = if count == 0
+                && (ok != 0 || error == ERROR_BROKEN_PIPE || error == ERROR_PIPE_NOT_CONNECTED)
+            {
+                "no-bytes"
+            } else {
+                "unexpected-read"
+            };
+            std::fs::write(&args[3], outcome).unwrap();
+        }
+        "mark-launch" => {
+            std::fs::write(&args[2], "launched").unwrap();
+        }
+        "stdin" | "stdin-eof" => {
+            let mut inside = 0;
+            assert_ne!(
+                unsafe { IsProcessInJob(GetCurrentProcess(), std::ptr::null_mut(), &mut inside) },
+                0
+            );
+            let mut available = 0;
+            let input = unsafe {
+                windows_sys::Win32::System::Console::GetStdHandle(
+                    windows_sys::Win32::System::Console::STD_INPUT_HANDLE,
+                )
+            };
+            if args[1] == "stdin" {
+                assert_ne!(
+                    unsafe {
+                        windows_sys::Win32::System::Pipes::PeekNamedPipe(
+                            input,
+                            std::ptr::null_mut(),
+                            0,
+                            std::ptr::null_mut(),
+                            &mut available,
+                            std::ptr::null_mut(),
+                        )
+                    },
+                    0
+                );
+                println!("ready {available} {inside}");
+                io::stdout().flush().unwrap();
+                while args[2] != "-" && !std::path::Path::new(&args[2]).exists() {
+                    thread::sleep(Duration::from_millis(5));
+                }
+                // Force callers to drain both output channels while feeding input.
+                io::stdout().write_all(&vec![b'x'; 180000]).unwrap();
+                io::stderr().write_all(&vec![b'y'; 160000]).unwrap();
+            }
+            let mut count = 0u64;
+            let mut hash = 2166136261u32;
+            let mut buf = [0u8; 8192];
+            loop {
+                let read = io::stdin().read(&mut buf).unwrap();
+                if read == 0 {
+                    break;
+                }
+                count += read as u64;
+                for &byte in &buf[..read] {
+                    hash = hash.wrapping_mul(16777619) ^ byte as u32;
+                }
+            }
+            if args[1] == "stdin-eof" {
+                // Synthetic lifecycle evidence only, never input contents.
+                std::fs::write(&args[2], count.to_string()).unwrap();
+            } else {
+                println!("\nend {count} {hash}");
+            }
+        }
+        "stdin-closed" => {
+            let input = unsafe {
+                windows_sys::Win32::System::Console::GetStdHandle(
+                    windows_sys::Win32::System::Console::STD_INPUT_HANDLE,
+                )
+            };
+            assert_ne!(unsafe { CloseHandle(input) }, 0);
+            println!("closed");
+            io::stdout().flush().unwrap();
+            loop {
+                thread::sleep(Duration::from_millis(10));
+            }
+        }
+        "stdin-tree" => {
+            use std::os::windows::process::CommandExt;
+            use std::process::{Command, Stdio};
+            let child = Command::new(std::env::current_exe().unwrap())
+                .args(["stdin", "-"])
+                .stdin(Stdio::inherit())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+                .spawn()
+                .unwrap();
+            println!("descendant {}", child.id());
+            io::stdout().flush().unwrap();
+            std::process::exit(259);
+        }
         "environment" => {
             fn json(value: &str) -> String {
                 let mut out = String::from("\"");

@@ -25,6 +25,7 @@ const { activeProcesses } = job.accounting();
 type WindowsJobSpawnOptions = {
   readonly executable: string;
   readonly commandLine: string;
+  readonly stdin?: "null" | "pipe";
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string>>;
 };
@@ -44,6 +45,8 @@ class WindowsJobChild implements Disposable {
   readonly pid: number;
   readStdout(maxBytes: number): Buffer | null;
   readStderr(maxBytes: number): Buffer | null;
+  writeStdin(bytes: Buffer): number | null;
+  closeStdin(): void;
   exitCode(): number | null;
   close(): void;
   [Symbol.dispose](): void;
@@ -100,7 +103,7 @@ is not authority to act on a PID. Accounting and enumeration do not wait for ext
 
 `spawn` uses an explicit executable and raw Windows command line; quoting and shell choice
 belong to the caller. It supplies atomic job admission and an inherited-handle allowlist.
-The child receives NUL stdin and owned stdout/stderr pipes, starts in a new process group,
+The child receives NUL stdin by default and owned stdout/stderr pipes, starts in a new process group,
 and has no console window. Omitted environment inherits; a supplied environment replaces
 the block passed to Windows.
 proc-safe passes exactly the caller's entries (an empty block for `{}`); Windows may add
@@ -108,6 +111,62 @@ loader/platform variables in the child, such as `PROCESSOR_ARCHITECTURE`. See Mi
 [architecture environment documentation](https://learn.microsoft.com/en-us/windows/win32/winprog64/wow64-implementation-details).
 Environment names containing `=` or duplicate names ignoring case are rejected. NULs are
 rejected in strings. `cwd` is optional. No shell fallback or post-launch admission is used.
+
+### Private input
+
+Opt into `stdin: "pipe"` to give the child an owned private input stream. Omitted stdin or
+`stdin: "null"` retains NUL behavior. Spawn never queues or sends input: callers can verify
+and bind the child's PID/birth identity before explicitly releasing any bytes.
+
+```ts
+using child = job.spawn({ executable, commandLine, stdin: "pipe" });
+// Verify/bind identity here according to your application's policy, before writing.
+// In your scheduling loop, drain output and attempt the remaining input prefix:
+const accepted = child.writeStdin(remaining);
+if (accepted === null) {
+  // The reader has disconnected; input was not fully delivered.
+} else {
+  remaining = remaining.subarray(accepted); // zero means no bytes accepted; yield before trying again
+  if (remaining.length === 0) child.closeStdin();
+}
+```
+
+`writeStdin` requires a nonempty `Buffer` of at most 2^32−1 bytes. It returns the number of
+prefix bytes accepted immediately, including a partial prefix or zero when no bytes are accepted.
+Zero does not prove that the pipe is full. Each call makes one kernel write attempt of at most
+64 KiB; larger buffers can produce a positive partial result even when the pipe has capacity.
+It never waits for the child to read. It retains no buffer, queues no suffix, and performs no retry.
+Accepted bytes are copied into the kernel stream; this is not proof of child consumption.
+Any positive result has **already released that prefix**, even if a later write returns
+zero, disconnects, or throws. An incomplete grant must not be described as withheld:
+track release from the first positive acceptance, independently of complete delivery.
+Even complete kernel acceptance does not prove that the child consumed the grant.
+Callers own scheduling, concurrent output drainage, byte/elapsed-time budgets, and deciding
+whether to send more. Do not call it with an empty remainder.
+
+A proven broken/disconnected read endpoint returns `null`, including repeated attempts until
+explicit input close. Other native failures throw typed errors, without input bytes or the
+internal pipe name. Root exit alone does not close input: a descendant may inherit the read
+endpoint and continue consuming. Successful writes do not prove the root is alive or that
+all descendants have exited.
+
+`closeStdin()` idempotently closes the native-owned writer, allowing the reader to observe
+EOF after accepted bytes drain. It also safely does nothing for default NUL input. Writes
+without pipe input or after `closeStdin()` throw `invalid-argument`. `child.close()`, native
+finalization/Worker teardown, and owner-process exit close the writer too; closing the child
+does not terminate its job. After child close, `closeStdin()` and writes throw
+`invalid-argument`, like other child operations.
+
+The implementation uses a local byte-mode named pipe with a non-inheritable parent writer
+in `PIPE_NOWAIT` mode and a blocking child reader. This is an immediate polling write API,
+not overlapped/background I/O. It does not assume that anonymous `CreatePipe` handles
+support nonblocking writes. Microsoft documents the accepted-prefix semantics in
+[named pipe wait modes](https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-type-read-and-wait-modes).
+The name uses 128 bits from the Windows system cryptographic RNG. Creation rejects a
+pre-existing first instance and remote clients, and verifies the connected local client
+PID before exposing the writer or launching the child. An intercepted connection fails
+closed before any input write. Only the reader joins the existing child handle allowlist;
+no writer handle, pipe name, or raw handle is exposed to JavaScript or passed in argv/env.
 
 Reads return available bytes up to the positive unsigned 32-bit `maxBytes`, an empty Buffer
 when no data is currently available, or null at proven EOF. They never wait for data. Callers
@@ -141,8 +200,16 @@ its handle table can change lifetime semantics. This API adds no service/launche
 The Windows x64 and ARM64 native CI lanes run `scripts/windows-job-proof.mjs` under Node and
 Bun. Each exercises main-thread and Worker owners, output drainage, retained exited identity,
 exit code 259, named jobs, cancellation, detached descendants, output EOF before extinction,
-nested jobs, Worker cleanup, process death, retained process lifetime, remote-handle rollback,
+nested jobs, private-input gating/backpressure/EOF, root exit with an inherited input reader,
+input-owner closure and death, Worker cleanup, process death, retained process lifetime, remote-handle rollback,
 and owner death during handoff. An independent Rust fixture supplies descendants and owners.
+The private-input proof also tests the Doctor nesting order: a parent retains an outer
+kill-on-close Job and atomically admits a child before that child creates and retains a
+distinct inner kill-on-close Job, on main and in a real Worker, before reading input.
+It observes live outer descendant accounting before zero, both when inner kill-on-close
+terminates descendants at child exit and when the parent terminates the outer Job.
+Closing the parent writer while the child is still alive must let that child observe EOF;
+an inherited writer would keep the pipe open and prevent this observation.
 Each thread also tests wrong-mode refusals and an observer of a process whose DACL denies
 DUP_HANDLE. For the denial proof, the separate test addon impersonates the calling thread,
 disables SeDebugPrivilege, invokes the same pinned-open path, and always reverts before
@@ -151,5 +218,9 @@ ObjectBasicInformation and verifies all three exact masks on the main thread and
 
 The `fault-injection` Cargo feature is off by default. Windows CI builds its addon in a
 separate target directory and tests post-duplication rollback on Node and Bun, both on the
-main thread and in a Worker. The production build and package collector reject artifacts
-containing the test-only fault export; platform packages never receive this addon.
+main thread and in a Worker. A test-only synchronization hook also lets an independent
+local client connect before the owner's own open. The test checks that the owner fails,
+the intended child is not launched, and the competitor receives no bytes. This exercises
+the busy-pipe failure path using the separate test addon; it does not force the distinct
+client-PID-mismatch branch. The production build and package collector reject artifacts
+containing test-only exports; platform packages never receive this addon.
