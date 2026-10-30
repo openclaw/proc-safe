@@ -1,4 +1,4 @@
-import { PinnedProcess, WindowsJob, bindCurrentProcessLifetimeTo } from "../src/windows-job.js";
+import { PinnedProcess, WindowsJob, bindCurrentProcessLifetimeTo, spawnWindowsProcess, type WindowsProcessSpawnOptions } from "../src/windows-job.js";
 
 const observer = PinnedProcess.open(123);
 const owner = PinnedProcess.open(123, { access: "lifetime-owner", expect: { startTimeMicros: 456 } });
@@ -15,3 +15,13 @@ if (member) WindowsJob.create().assignProcess(member);
 PinnedProcess.open(123, { imagePath: "example.exe" });
 // @ts-expect-error only named capability modes are accepted
 PinnedProcess.open(123, { access: "all" });
+
+WindowsJob.create({ allowBreakaway: true });
+if (owner) bindCurrentProcessLifetimeTo(owner, { allowBreakaway: true });
+// @ts-expect-error permission is an explicit boolean
+WindowsJob.create({ allowBreakaway: "yes" });
+
+const processOptions: WindowsProcessSpawnOptions = { breakawayFromJob: true, stdio: ["pipe", "pipe", "pipe", "ipc"] };
+spawnWindowsProcess("C:\\node.exe", ["--version"], processOptions);
+// @ts-expect-error breakaway is an explicit boolean
+spawnWindowsProcess("C:\\node.exe", [], { breakawayFromJob: "yes" });

@@ -35,6 +35,7 @@ for (const target of targets) {
   assert.ok(existsSync(new URL("proc-safe-native.node", directory)), `missing binary ${target.label}`);
   assert.ok(!readFileSync(new URL("proc-safe-native.node", directory)).includes(Buffer.from("failNextWindowsJobAssignment")), `fault injection is forbidden in published artifacts: ${target.label}`);
   assert.ok(!readFileSync(new URL("proc-safe-native.node", directory)).includes(Buffer.from("openWindowsPinWithoutDebug")), `test impersonation is forbidden in published artifacts: ${target.label}`);
+  if (target.os === "win32") assert.ok(existsSync(new URL("proc-safe-spawn.exe", directory)), `missing breakaway launcher ${target.label}`);
   pack(directory);
 }
 pack(new URL("../", import.meta.url));

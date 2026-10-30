@@ -29,7 +29,7 @@ type WindowsJobSpawnOptions = {
   readonly env?: Readonly<Record<string, string>>;
 };
 class WindowsJob implements Disposable {
-  static create(options?: { name?: string; killOnJobClose?: boolean }): WindowsJob;
+  static create(options?: { name?: string; killOnJobClose?: boolean; allowBreakaway?: boolean }): WindowsJob;
   static open(name: string): WindowsJob | null;
   assignCurrentProcess(): void;
   assignProcess(target: PinnedProcess): void;
@@ -58,7 +58,9 @@ class PinnedProcess implements Disposable {
 }
 function isCurrentProcessInJob(): boolean;
 function retainCurrentProcessJobUntilExit(job: WindowsJob): void;
-function bindCurrentProcessLifetimeTo(owner: PinnedProcess): void;
+function bindCurrentProcessLifetimeTo(owner: PinnedProcess, options?: { allowBreakaway?: boolean }): void;
+type WindowsProcessSpawnOptions = SpawnOptions & { readonly breakawayFromJob?: boolean };
+function spawnWindowsProcess(command: string, args: readonly string[], options?: WindowsProcessSpawnOptions): ChildProcess;
 function isSupported(): boolean;
 ```
 
@@ -153,3 +155,43 @@ The `fault-injection` Cargo feature is off by default. Windows CI builds its add
 separate target directory and tests post-duplication rollback on Node and Bun, both on the
 main thread and in a Worker. The production build and package collector reject artifacts
 containing the test-only fault export; platform packages never receive this addon.
+
+## Explicit breakaway spawning
+
+Jobs created with `{ allowBreakaway: true }`, including lifetime-bound Jobs,
+retain kill-on-close and add `JOB_OBJECT_LIMIT_BREAKAWAY_OK`. They never enable
+silent breakaway: ordinary children remain contained. The default is false.
+Every containing Job must permit breakaway; permitting only an outer Job is
+insufficient when the current process also belongs to a nested command Job.
+
+`spawnWindowsProcess(command, args, options)` delegates to Node's `spawn` unchanged
+unless `breakawayFromJob: true` is explicitly requested. The default route works
+on all Node platforms and does not load a native binding. The opt-in route requires
+Windows x64/ARM64 and an explicit executable path, and rejects shell execution.
+
+The payload has a new process group and no console window. The opt-in route
+launches the package's native `proc-safe-spawn.exe` with the caller-supplied stdio,
+cwd and environment. The launcher passes those exact standard handles and Node's
+inherited CRT descriptor table through an
+explicit handle allowlist to `CreateProcessW(CREATE_BREAKAWAY_FROM_JOB)`. There is
+no pipe proxy, environment file, or byte protocol. JSON IPC on an `ipc` descriptor
+continues directly between the caller and payload; native handle transfer through
+Node `sendHandle` is unsupported because Node records the launcher's PID.
+
+The returned `ChildProcess` describes the native launcher: its PID, signal/abort
+handling and `kill()` target the launcher, while the payload has a separate PID.
+Callers needing independent lifetime must retain and settle their own payload
+identity. The launcher forwards the payload's exit code while it remains alive.
+A payload creation failure exits the launcher with code 1 and a stderr diagnostic;
+it is not a Node spawn-error event. Once the payload starts it can outlive both the
+containing Job and launcher, so stopping only the launcher does not stop it.
+
+The Windows proof runs on the main thread and a Worker, with a lifetime-bound
+outer Job and nested command Job. Native command-line inspection verifies
+quoted, empty and Unicode arguments. It also checks argv0, synthetic environment,
+explicit-child survival, ordinary-child extinction,
+and denied breakaway when the inner Job uses its default. It also verifies
+inherited stdin/stdout traffic, an output receipt after owner death, and JSON IPC
+before owner death. A payload that closes a caller-owned output pipe and IPC while staying alive also
+proves that EOF/disconnect reaches the caller before the launcher exits. The
+ordinary Job/child tests remain unchanged.

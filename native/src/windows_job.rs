@@ -369,11 +369,11 @@ impl NativePinnedProcess {
         self.handle.close()
     }
     #[napi]
-    pub fn bind_lifetime(&self) -> Result<()> {
+    pub fn bind_lifetime(&self, allow_breakaway: Option<bool>) -> Result<()> {
         self.access.require(PinAccess::LifetimeOwner)?;
         let owner = self.handle.get()?;
         live(owner)?;
-        let job = create_job(None, true)?;
+        let job = create_job(None, true, allow_breakaway.unwrap_or(false))?;
         let local = job.handle.get()?;
         let mut remote = null_mut();
         if unsafe {
@@ -439,7 +439,7 @@ pub struct NativeJob {
     handle: Handle,
 }
 
-fn create_job(name: Option<String>, kill: bool) -> Result<NativeJob> {
+fn create_job(name: Option<String>, kill: bool, allow_breakaway: bool) -> Result<NativeJob> {
     let name = name.as_deref().map(wide).transpose()?;
     let raw = unsafe { CreateJobObjectW(null(), name.as_ref().map_or(null(), |s| s.as_ptr())) };
     let handle = Handle::new(raw, "CreateJobObjectW")?;
@@ -450,6 +450,9 @@ fn create_job(name: Option<String>, kill: bool) -> Result<NativeJob> {
     let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { zeroed() };
     if kill {
         limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    }
+    if allow_breakaway {
+        limits.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_BREAKAWAY_OK;
     }
     if unsafe {
         SetInformationJobObject(
@@ -466,8 +469,12 @@ fn create_job(name: Option<String>, kill: bool) -> Result<NativeJob> {
 }
 
 #[napi]
-pub fn create_windows_job(name: Option<String>, kill_on_job_close: bool) -> Result<NativeJob> {
-    create_job(name, kill_on_job_close)
+pub fn create_windows_job(
+    name: Option<String>,
+    kill_on_job_close: bool,
+    allow_breakaway: Option<bool>,
+) -> Result<NativeJob> {
+    create_job(name, kill_on_job_close, allow_breakaway.unwrap_or(false))
 }
 
 #[napi]
@@ -879,4 +886,33 @@ pub fn is_current_process_in_job() -> Result<bool> {
         return Err(win_error("IsProcessInJob"));
     }
     Ok(inside != 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn breakaway_permission_is_explicit_and_never_silent() {
+        for allow_breakaway in [false, true] {
+            let job = create_job(None, true, allow_breakaway).unwrap();
+            let mut observed: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { zeroed() };
+            assert_ne!(
+                unsafe {
+                    QueryInformationJobObject(
+                        job.handle.get().unwrap(),
+                        JobObjectExtendedLimitInformation,
+                        (&mut observed as *mut JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+                        size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+                        null_mut(),
+                    )
+                },
+                0
+            );
+            let flags = observed.BasicLimitInformation.LimitFlags;
+            assert_ne!(flags & JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, 0);
+            assert_eq!(flags & JOB_OBJECT_LIMIT_BREAKAWAY_OK != 0, allow_breakaway);
+            assert_eq!(flags & JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK, 0);
+        }
+    }
 }

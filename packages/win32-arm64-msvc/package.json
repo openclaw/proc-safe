@@ -21,7 +21,8 @@
   ],
   "main": "proc-safe-native.node",
   "files": [
-    "proc-safe-native.node"
+    "proc-safe-native.node",
+    "proc-safe-spawn.exe"
   ],
   "engines": {
     "node": ">=22"

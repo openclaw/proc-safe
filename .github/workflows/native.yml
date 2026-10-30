@@ -57,8 +57,8 @@ jobs:
         run: |
           minimum=$(otool -l native/proc-safe-native.darwin-${{ matrix.arch }}.node | awk '/LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX/ { found = 1; next } found && ($1 == "minos" || $1 == "version") { print $2; exit }')
           test "$minimum" = '${{ matrix.macos-minimum }}'
-      - name: Darwin-only Rust unit tests
-        if: runner.os == 'macOS' && matrix.node == '24.22.1'
+      - name: Platform Rust unit tests
+        if: (runner.os == 'macOS' || runner.os == 'Windows') && matrix.node == '24.22.1'
         run: cargo test --workspace --locked
       - name: Prepare real systemd user-manager proof
         if: runner.os == 'Linux'
@@ -141,7 +141,9 @@ jobs:
         if: matrix.node == '24.22.1'
         with:
           name: binding-${{ matrix.label }}
-          path: native/*.node
+          path: |
+            native/*.node
+            native/*.exe
           if-no-files-found: error
   musl:
     name: Native (${{ matrix.label }}, Node ${{ matrix.node-major }})

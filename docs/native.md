@@ -124,3 +124,11 @@ with `TokenIsAppContainer`, then `TokenAppContainerSid` only when contained. Rus
 validates returned lengths and the SID bounds before converting it to a string,
 and closes the token handle on every path. Queries are fresh on the calling
 thread; thread impersonation does not change which process token is inspected.
+
+
+The Windows platform packages also contain `proc-safe-spawn.exe`. This native-only
+launcher preserves libuv's standard handles and CRT descriptor table while creating
+an explicitly requested breakaway payload. It neither consumes Node IPC environment
+variables nor interprets stream bytes. The package build, artifact collection, and
+consumer package checks include the executable alongside the addon. No executable
+is included in the platform-independent root package.
