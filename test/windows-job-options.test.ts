@@ -1,3 +1,4 @@
+import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 const native = vi.hoisted(() => ({
@@ -19,11 +20,12 @@ vi.mock("node:module", () => ({ createRequire: () => ({ resolve: native.resolve 
 import { bindCurrentProcessLifetimeTo, PinnedProcess, spawnWindowsProcess, WindowsJob } from "../src/windows-job.js";
 
 const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+const nativeDirectory = path.resolve("native");
 beforeEach(() => {
   vi.clearAllMocks();
   Object.defineProperty(process, "platform", { value: "win32", configurable: true });
   native.create.mockReturnValue(native.job);
-  native.resolve.mockReturnValue("/native/proc-safe-native.node");
+  native.resolve.mockReturnValue(path.join(nativeDirectory, "proc-safe-native.node"));
 });
 afterEach(() => Object.defineProperty(process, "platform", platform));
 
@@ -42,7 +44,7 @@ test("explicit breakaway preserves caller stdio and environment through the nati
   const stdio = ["pipe", "pipe", 7, "ipc"] as const;
   const env = { KEEP_ME: "synthetic" };
   spawnWindowsProcess("C:\\node.exe", ["", "a b", "extra"], { breakawayFromJob: true, stdio: [...stdio], env, detached: true, cwd: "C:\\work" });
-  expect(native.spawn).toHaveBeenCalledExactlyOnceWith("/native/proc-safe-spawn.exe", ["quoted", "C:\\node.exe", "C:\\node.exe", "", "a b", "extra"], {
+  expect(native.spawn).toHaveBeenCalledExactlyOnceWith(path.join(nativeDirectory, "proc-safe-spawn.exe"), ["quoted", "C:\\node.exe", "C:\\node.exe", "", "a b", "extra"], {
     stdio: [...stdio], env, detached: true, cwd: "C:\\work", argv0: undefined, windowsVerbatimArguments: false,
   });
 });

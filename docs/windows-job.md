@@ -191,6 +191,6 @@ outer Job and nested command Job. It checks quoted/empty/Unicode arguments,
 argv0, synthetic environment, explicit-child survival, ordinary-child extinction,
 and denied breakaway when the inner Job uses its default. It also verifies
 inherited stdin/stdout traffic, an output receipt after owner death, and JSON IPC
-before owner death. A payload that closes stdout and IPC while staying alive also
+before owner death. A payload that closes a caller-owned output pipe and IPC while staying alive also
 proves that EOF/disconnect reaches the caller before the launcher exits. The
 ordinary Job/child tests remain unchanged.

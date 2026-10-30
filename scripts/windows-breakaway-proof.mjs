@@ -20,33 +20,39 @@ process.on('disconnect', () => process.stdout.write('payload:owner-exited\\n'));
 process.stdin.on('data', bytes => process.stdout.write('payload:' + bytes));
 process.stdout.write('escaped:' + process.pid + '\\n');
 `;
-async function bounded(promise) {
+async function bounded(promise, describe = () => "") {
   let timer;
   try {
     return await Promise.race([promise, new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error("stream closure did not propagate before launcher exit")), 8_000);
+      timer = setTimeout(() => reject(new Error("stream closure did not propagate before launcher exit: " + describe())), 8_000);
     })]);
   } finally { clearTimeout(timer); }
 }
 async function closedStreamsBoundary() {
   const source = `
     const fs = require('node:fs');
-    process.on('message', () => {fs.closeSync(1); process.disconnect();});
+    process.on('message', () => {fs.closeSync(4); process.disconnect();});
     process.send({pid: process.pid});
     setInterval(() => {}, 1000);
   `;
   const child = spawnWindowsProcess(process.execPath, ["-e", source], {
-    breakawayFromJob: true, detached: true, stdio: ["ignore", "pipe", "ignore", "ipc"],
+    // Node duplicates standard handles internally. An extra caller-owned pipe
+    // tests EOF without depending on process.stdout's protected lifetime.
+    breakawayFromJob: true, detached: true, stdio: ["ignore", "ignore", "ignore", "ipc", "pipe"],
   });
   const exited = once(child, "exit");
   let payload;
   try {
     const [hello] = await once(child, "message");
     payload = PinnedProcess.open(hello.pid);
-    const closed = Promise.all([once(child.stdout, "end"), once(child, "disconnect")]);
-    child.stdout.resume();
+    let outputEnded = false, ipcDisconnected = false;
+    const closed = Promise.all([
+      once(child.stdio[4], "end").then(() => { outputEnded = true; }),
+      once(child, "disconnect").then(() => { ipcDisconnected = true; }),
+    ]);
+    child.stdio[4].resume();
     child.send("close-streams");
-    await bounded(closed);
+    await bounded(closed, () => `outputEnded=${outputEnded}, ipcDisconnected=${ipcDisconnected}, launcherExit=${child.exitCode}, payloadExited=${payload.identity.exited}`);
     assert.equal(child.exitCode, null, "EOF and IPC closure precede launcher exit");
     assert.equal(payload.identity.exited, false, "payload remains alive after closing streams");
   } finally {
@@ -108,7 +114,10 @@ async function runCase(worker, allowBreakaway) {
       assert.match(first, /^escaped:\d+$/);
       escaped = PinnedProcess.open(Number(first.split(":")[1]));
       const second = await next();
-      assert.match(second, /^ordinary:\d+$/);
+      if (!/^ordinary:\d+$/.test(second)) {
+        await exited;
+        assert.fail(`Unexpected owner output ${JSON.stringify(second)}. Owner stderr: ${errors}`);
+      }
       ordinary = PinnedProcess.open(Number(second.split(":")[1]));
       assert.equal(escaped.identity.exited, false);
     } else {
