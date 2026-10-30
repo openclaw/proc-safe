@@ -187,8 +187,9 @@ it is not a Node spawn-error event. Once the payload starts it can outlive both 
 containing Job and launcher, so stopping only the launcher does not stop it.
 
 The Windows proof runs on the main thread and a Worker, with a lifetime-bound
-outer Job and nested command Job. It checks quoted/empty/Unicode arguments,
-argv0, synthetic environment, explicit-child survival, ordinary-child extinction,
+outer Job and nested command Job. Native command-line inspection verifies
+quoted, empty and Unicode arguments. It also checks argv0, synthetic environment,
+explicit-child survival, ordinary-child extinction,
 and denied breakaway when the inner Job uses its default. It also verifies
 inherited stdin/stdout traffic, an output receipt after owner death, and JSON IPC
 before owner death. A payload that closes a caller-owned output pipe and IPC while staying alive also

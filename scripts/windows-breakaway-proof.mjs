@@ -4,6 +4,7 @@ import { once } from "node:events";
 import { createInterface } from "node:readline";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
 import { bindCurrentProcessLifetimeTo, PinnedProcess, WindowsJob, spawnWindowsProcess } from "../dist/windows-job.js";
+import { readProcessCommand } from "../dist/inspect.js";
 
 const entry = new URL(import.meta.url);
 const pause = () => new Promise(resolve => setTimeout(resolve, 5));
@@ -13,7 +14,7 @@ async function until(predicate) {
   throw new Error("Windows breakaway proof deadline expired");
 }
 const payload = `
-process.send({pid: process.pid, value: 'hello', args: process.argv.slice(1), argv0: process.argv0, sample: process.env.PROC_SAFE_BREAKAWAY_SAMPLE});
+process.send({pid: process.pid, value: 'hello', argv0: process.argv0, sample: process.env.PROC_SAFE_BREAKAWAY_SAMPLE});
 setInterval(() => {}, 1000);
 process.on('message', value => process.send({echo: value}));
 process.on('disconnect', () => process.stdout.write('payload:owner-exited\\n'));
@@ -84,7 +85,10 @@ async function owner(allowBreakaway, lifetimeOwnerPid) {
     return;
   }
   const [hello] = await once(escaped, "message");
-  assert.deepEqual(hello, { pid: hello.pid, value: "hello", args, argv0: "synthetic-node", sample: "synthetic" });
+  assert.deepEqual(hello, { pid: hello.pid, value: "hello", argv0: "synthetic-node", sample: "synthetic" });
+  // Observe the OS argv: a runtime CLI can normalize its JavaScript process.argv
+  // independently of the command line that the spawn owner actually supplied.
+  assert.deepEqual(readProcessCommand(hello.pid)?.argv, ["synthetic-node", "-e", payload, "--", ...args]);
   assert.equal(inner.processIds().includes(hello.pid), false, "explicit child leaves the inner Job");
   escaped.send({ sample: "JSON IPC" });
   const [echo] = await once(escaped, "message");
