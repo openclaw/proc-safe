@@ -25,5 +25,6 @@ for (const target of nativeTargets) {
   assert.deepEqual(native.cpu, [target.cpu]);
   assert.deepEqual(native.libc, target.libc ? [target.libc] : undefined);
   assert.equal(native.main, "proc-safe-native.node");
+  assert.deepEqual(native.files, target.os === "win32" ? ["proc-safe-native.node", "proc-safe-spawn.exe"] : ["proc-safe-native.node"]);
 }
 console.log(`Packed entry points and ${nativeTargets.length} target manifests verified`);

@@ -9,6 +9,8 @@ for (const file of [...walk("src"), ...walk("native/src"), ...walk("test"), ...w
   assert.ok(text.endsWith("\n"), `${file}: missing final newline`);
 }
 for (const file of walk("src")) {
-  assert.ok(!/node:child_process|\b(?:execSync|spawnSync)\b/.test(readFileSync(file, "utf8")), `${file}: shell fallback`);
+  const source = readFileSync(file, "utf8");
+  assert.ok(!/\b(?:execSync|spawnSync)\b/.test(source), `${file}: synchronous process execution`);
+  assert.ok(file === "src/windows-job.ts" || !/node:child_process/.test(source), `${file}: shell fallback`);
 }
 console.log("Source formatting and native boundary checks passed");

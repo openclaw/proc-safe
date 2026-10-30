@@ -1,3 +1,6 @@
+import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
+import { createRequire } from "node:module";
+import path from "node:path";
 import { ProcSafeError } from "./errors.js";
 import type { ProcessIdentity } from "./identity.js";
 import type { NativeJob, NativeJobChild, NativePinnedProcess } from "./native-binding.js";
@@ -53,12 +56,14 @@ export class WindowsJob implements Disposable {
     jobs.set(this, native);
     Object.freeze(this);
   }
-  static create(options?: { name?: string; killOnJobClose?: boolean }): WindowsJob {
+  static create(options?: { name?: string; killOnJobClose?: boolean; allowBreakaway?: boolean }): WindowsJob {
     const native = binding();
     const name = options?.name === undefined ? undefined : text(options.name, "name");
     const kill = options?.killOnJobClose ?? true;
     if (typeof kill !== "boolean") throw new ProcSafeError("invalid-argument", "killOnJobClose must be boolean");
-    return new WindowsJob(call(() => native.createWindowsJob(name, kill)), key);
+    const allowBreakaway = options?.allowBreakaway ?? false;
+    if (typeof allowBreakaway !== "boolean") throw new ProcSafeError("invalid-argument", "allowBreakaway must be boolean");
+    return new WindowsJob(call(() => native.createWindowsJob(name, kill, allowBreakaway)), key);
   }
   static open(name: string): WindowsJob | null {
     const native = binding();
@@ -155,7 +160,37 @@ export function retainCurrentProcessJobUntilExit(job: WindowsJob): void {
   jobs.delete(job);
 }
 /** The verified owner receives the only handle to a fresh job containing this process. */
-export function bindCurrentProcessLifetimeTo(owner: PinnedProcess): void {
-  call(() => nativeOwner(pinned, owner).bindLifetime());
+export function bindCurrentProcessLifetimeTo(owner: PinnedProcess, options?: { allowBreakaway?: boolean }): void {
+  const allowBreakaway = options?.allowBreakaway ?? false;
+  if (typeof allowBreakaway !== "boolean") throw new ProcSafeError("invalid-argument", "allowBreakaway must be boolean");
+  call(() => nativeOwner(pinned, owner).bindLifetime(allowBreakaway));
 }
 export function isSupported(): boolean { try { binding(); return true; } catch { return false; } }
+
+export type WindowsProcessSpawnOptions = SpawnOptions & { readonly breakawayFromJob?: boolean };
+
+/**
+ * A native launcher preserves stdio while the payload explicitly leaves containing Jobs.
+ * The returned PID and kill/abort target the launcher; callers own payload settlement.
+ * JSON IPC is preserved, but Node sendHandle targets the launcher and is unsupported.
+ */
+export function spawnWindowsProcess(command: string, args: readonly string[], options: WindowsProcessSpawnOptions = {}): ChildProcess {
+  const { breakawayFromJob = false, ...spawnOptions } = options;
+  if (typeof breakawayFromJob !== "boolean") throw new ProcSafeError("invalid-argument", "breakawayFromJob must be boolean");
+  if (!breakawayFromJob) return spawn(command, [...args], spawnOptions);
+  binding();
+  text(command, "command");
+  if (!path.win32.isAbsolute(command)) throw new ProcSafeError("invalid-argument", "breakaway spawning requires an absolute executable path");
+  for (const arg of args) text(arg, "argument", true);
+  if (spawnOptions.shell) throw new ProcSafeError("invalid-argument", "breakaway spawning does not support a shell");
+  const require = createRequire(import.meta.url);
+  const nativePackage = require.resolve(`@openclaw/proc-safe-win32-${process.arch}-msvc`);
+  const launcher = path.join(path.dirname(nativePackage), "proc-safe-spawn.exe");
+  // Node supplies all pipes and its CRT descriptor table to the native launcher.
+  // The payload inherits them unchanged, including the existing JSON IPC channel.
+  return spawn(launcher, [spawnOptions.windowsVerbatimArguments ? "verbatim" : "quoted", spawnOptions.argv0 ?? command, command, ...args], {
+    ...spawnOptions,
+    argv0: undefined,
+    windowsVerbatimArguments: false,
+  });
+}

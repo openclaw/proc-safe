@@ -47,3 +47,7 @@ path = "../test/fixtures/windows-job.rs"
 [[bin]]
 name = "proc-safe-appcontainer-fixture"
 path = "../test/fixtures/windows-appcontainer.rs"
+
+[[bin]]
+name = "proc-safe-spawn"
+path = "src/windows_spawn.rs"

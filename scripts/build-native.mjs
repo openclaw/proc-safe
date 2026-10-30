@@ -15,4 +15,9 @@ if (["failNextWindowsJobAssignment", "openWindowsPinWithoutDebug"].some(name => 
 }
 copyFileSync(source, new URL(`native/${target.artifact}`, root));
 copyFileSync(source, new URL("proc-safe-native.node", nativePackageDirectory(target)));
+if (target.os === "win32") {
+  const launcher = new URL(`target/${target.rust}/release/proc-safe-spawn.exe`, root);
+  copyFileSync(launcher, new URL(`native/proc-safe-spawn.${target.label}.exe`, root));
+  copyFileSync(launcher, new URL("proc-safe-spawn.exe", nativePackageDirectory(target)));
+}
 console.log(`Built and staged ${target.label}`);
