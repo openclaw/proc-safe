@@ -115,7 +115,7 @@
     "@openclaw/proc-safe-win32-x64-msvc": "0.4.2"
   },
   "devDependencies": {
-    "@napi-rs/cli": "3.10.9",
+    "@napi-rs/cli": "3.10.10",
     "@types/node": "^26.6.6",
     "sigstore": "5.0.0",
     "typescript": "^7.0.2",

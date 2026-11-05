@@ -172,8 +172,8 @@ importers:
   .:
     devDependencies:
       '@napi-rs/cli':
-        specifier: 3.10.9
-        version: 3.10.9(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@types/node@26.6.6)
+        specifier: 3.10.10
+        version: 3.10.10(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@types/node@26.6.6)
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
@@ -411,14 +411,14 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@napi-rs/cli@3.10.9':
-    resolution: {integrity: sha512-RpzJrTDlSxUi2Deo+dh4bmDTKklAVe295aSQjZspwbZyUBG7twbXbiKskL2w/bL4kNg3DdkrwbI/iQwI9kgQaQ==}
+  '@napi-rs/cli@3.10.10':
+    resolution: {integrity: sha512-vkeG0mchlQOEZ6DH9CVczAEQwEy/ZA5by94/3Dv3EakWMDIgaDKg4tzPmh75khkib1/m51Q1invNzFJXj2ZPTg==}
     engines: {node: ^20.17.0 || ^22.13.0 || >= 23.5.0}
     hasBin: true
     peerDependencies:
-      '@emnapi/core': ^1.7.1 || ^2.0.0-alpha.4
-      '@emnapi/runtime': ^1.7.1 || ^2.0.0-alpha.4
-      emnapi: ^1.7.1 || ^2.0.0-alpha.4
+      '@emnapi/core': ^1.7.1 || ^2.0.0-beta.2
+      '@emnapi/runtime': ^1.7.1 || ^2.0.0-beta.2
+      emnapi: ^1.7.1 || ^2.0.0-beta.2
     peerDependenciesMeta:
       '@emnapi/core':
         optional: true
@@ -1773,7 +1773,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@napi-rs/cli@3.10.9(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@types/node@26.6.6)':
+  '@napi-rs/cli@3.10.10(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@types/node@26.6.6)':
     dependencies:
       '@inquirer/prompts': 8.7.3(@types/node@26.6.6)
       '@napi-rs/cross-toolchain': 1.0.3
