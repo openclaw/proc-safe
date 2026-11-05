@@ -16,7 +16,7 @@ export interface NativeSystemdBus {
 export interface NativeJob {
   assignCurrent(): void;
   assign(process: NativePinnedProcess): void;
-  spawn(executable: string, commandLine: string, cwd: string | undefined, environment: string[] | undefined): NativeJobChild;
+  spawn(executable: string, commandLine: string, cwd: string | undefined, environment: string[] | undefined, pipeStdin: boolean): NativeJobChild;
   processIds(): number[];
   accounting(): { activeProcesses: number; totalProcesses: number; terminatedProcesses: number };
   terminate(exitCode: number): void;
@@ -27,6 +27,8 @@ export interface NativeJobChild {
   readonly pid: number;
   readStdout(maxBytes: number): Buffer | null;
   readStderr(maxBytes: number): Buffer | null;
+  writeStdin(bytes: Buffer): number | null;
+  closeStdin(): void;
   exitCode(): number | null;
   close(): void;
 }

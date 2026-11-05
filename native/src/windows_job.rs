@@ -13,12 +13,17 @@ use windows_sys::Win32::{
     Foundation::*,
     Security::SECURITY_ATTRIBUTES,
     Storage::FileSystem::{
-        CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_GENERIC_READ, FILE_SHARE_READ, FILE_SHARE_WRITE,
-        OPEN_EXISTING, ReadFile,
+        CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_GENERIC_READ,
+        FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING, PIPE_ACCESS_OUTBOUND, ReadFile,
+        WriteFile,
     },
     System::{
         JobObjects::*,
-        Pipes::{CreatePipe, PeekNamedPipe},
+        Pipes::{
+            ConnectNamedPipe, CreateNamedPipeW, CreatePipe, GetNamedPipeClientProcessId,
+            PIPE_NOWAIT, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE,
+            PeekNamedPipe,
+        },
         Threading::*,
     },
 };
@@ -26,6 +31,7 @@ use windows_sys::Win32::{
 #[cfg(feature = "fault-injection")]
 thread_local! {
     static FAIL_ASSIGNMENT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static INPUT_INTERCEPT: std::cell::RefCell<Option<(String, String)>> = const { std::cell::RefCell::new(None) };
 }
 
 /// Only the separate fault-proof addon exports this thread-local, one-shot fault.
@@ -33,6 +39,64 @@ thread_local! {
 #[napi]
 pub fn fail_next_windows_job_assignment() {
     FAIL_ASSIGNMENT.set(true);
+}
+
+/// Configure a one-shot competing client in the separate fault-proof addon only.
+#[cfg(feature = "fault-injection")]
+#[napi]
+pub fn intercept_next_windows_job_input(executable: String, result: String) -> Result<()> {
+    INPUT_INTERCEPT.with(|pending| {
+        let mut pending = pending.borrow_mut();
+        if pending.is_some() {
+            return Err(failure(
+                "invalid-argument",
+                "input interceptor already configured",
+            ));
+        }
+        *pending = Some((executable, result));
+        Ok(())
+    })
+}
+
+#[cfg(feature = "fault-injection")]
+fn test_input_interceptor(name: &str) -> Result<Option<std::process::Child>> {
+    use std::io::BufRead;
+    use std::process::{Command, Stdio};
+    let Some((executable, result)) = INPUT_INTERCEPT.take() else {
+        return Ok(None);
+    };
+    let mut command = Command::new(executable);
+    command.args(["competing-stdin", name, &result]).env_clear();
+    if let Some(system_root) = std::env::var_os("SystemRoot") {
+        command.env("SystemRoot", system_root);
+    }
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| failure("operation-failed", "cannot start test input competitor"))?;
+    let mut line = String::new();
+    let read = child
+        .stdout
+        .take()
+        .map(|output| std::io::BufReader::new(output).read_line(&mut line));
+    if !matches!(read, Some(Ok(_))) || line.trim_end() != "connected" {
+        let _ = child.kill();
+        let _ = child.wait();
+        let code = line
+            .trim_end()
+            .strip_prefix("connection-failed ")
+            .and_then(|value| value.parse::<u32>().ok());
+        return Err(failure(
+            "operation-failed",
+            match code {
+                Some(code) => format!("test input competitor connection failed (Win32 {code})"),
+                None => "test input competitor did not report a connection".into(),
+            },
+        ));
+    }
+    Ok(Some(child))
 }
 
 fn win_error(operation: &str) -> napi::Error {
@@ -613,6 +677,7 @@ impl NativeJob {
         command_line: String,
         cwd: Option<String>,
         environment: Option<Vec<String>>,
+        pipe_stdin: bool,
     ) -> Result<NativeJobChild> {
         let executable = wide(&executable)?;
         let mut command = wide(&command_line)?;
@@ -643,21 +708,27 @@ impl NativeJob {
         };
         let (stdout, stdout_write) = pipe(&sa)?;
         let (stderr, stderr_write) = pipe(&sa)?;
-        let nul = wide("NUL")?;
-        let stdin = Handle::new(
-            unsafe {
-                CreateFileW(
-                    nul.as_ptr(),
-                    FILE_GENERIC_READ,
-                    FILE_SHARE_READ | FILE_SHARE_WRITE,
-                    &sa,
-                    OPEN_EXISTING,
-                    FILE_ATTRIBUTE_NORMAL,
-                    null_mut(),
-                )
-            },
-            "CreateFileW(NUL)",
-        )?;
+        let (stdin, stdin_write) = if pipe_stdin {
+            let (reader, writer) = input_pipe(&sa)?;
+            (reader, Some(writer))
+        } else {
+            let nul = wide("NUL")?;
+            let reader = Handle::new(
+                unsafe {
+                    CreateFileW(
+                        nul.as_ptr(),
+                        FILE_GENERIC_READ,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE,
+                        &sa,
+                        OPEN_EXISTING,
+                        FILE_ATTRIBUTE_NORMAL,
+                        null_mut(),
+                    )
+                },
+                "CreateFileW(NUL)",
+            )?;
+            (reader, None)
+        };
         let mut size = 0;
         unsafe {
             InitializeProcThreadAttributeList(null_mut(), 2, 0, &mut size);
@@ -741,6 +812,7 @@ impl NativeJob {
         Ok(NativeJobChild {
             process,
             pid: info.dwProcessId,
+            stdin: stdin_write,
             stdout: Pipe {
                 handle: stdout,
                 ended: false,
@@ -765,6 +837,147 @@ fn pipe(sa: &SECURITY_ATTRIBUTES) -> Result<(Handle, Handle)> {
         return Err(win_error("SetHandleInformation"));
     }
     Ok((read, write))
+}
+
+const INPUT_PIPE_WRITE_LIMIT: u32 = 65536;
+
+// The anonymous output pipes are not a supported nonblocking-write transport.
+// Use an outbound byte-mode named pipe whose server writer is explicitly NOWAIT.
+fn input_pipe(sa: &SECURITY_ATTRIBUTES) -> Result<(Handle, InputPipe)> {
+    // System-preferred cryptographic RNG; available before the JOB_LIST platform floor.
+    #[link(name = "bcrypt")]
+    unsafe extern "system" {
+        fn BCryptGenRandom(algorithm: HANDLE, buffer: *mut u8, length: u32, flags: u32) -> i32;
+    }
+    const BCRYPT_USE_SYSTEM_PREFERRED_RNG: u32 = 2;
+    let mut random = [0u8; 16];
+    if unsafe {
+        BCryptGenRandom(
+            null_mut(),
+            random.as_mut_ptr(),
+            random.len() as u32,
+            BCRYPT_USE_SYSTEM_PREFERRED_RNG,
+        )
+    } < 0
+    {
+        return Err(failure(
+            "operation-failed",
+            "cannot generate private input pipe name",
+        ));
+    }
+    let nonce = u128::from_le_bytes(random);
+    let pipe_name = format!(r"\\.\pipe\proc-safe-input-{nonce:032x}");
+    let name = wide(&pipe_name)?;
+    // No SECURITY_ATTRIBUTES: the parent writer is never inheritable.
+    let writer = Handle::new(
+        unsafe {
+            CreateNamedPipeW(
+                name.as_ptr(),
+                PIPE_ACCESS_OUTBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_NOWAIT | PIPE_REJECT_REMOTE_CLIENTS,
+                1,
+                INPUT_PIPE_WRITE_LIMIT,
+                0,
+                0,
+                null(),
+            )
+        },
+        "CreateNamedPipeW(stdin)",
+    )?;
+    #[cfg(feature = "fault-injection")]
+    let _competitor = test_input_interceptor(&pipe_name)?;
+    let reader = Handle::new(
+        unsafe {
+            CreateFileW(
+                name.as_ptr(),
+                FILE_GENERIC_READ,
+                0,
+                sa,
+                OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL,
+                null_mut(),
+            )
+        },
+        "CreateFileW(stdin)",
+    )?;
+    // The client normally connects between CreateNamedPipeW and this call.
+    if unsafe { ConnectNamedPipe(writer.get()?, null_mut()) } == 0
+        && unsafe { GetLastError() } != ERROR_PIPE_CONNECTED
+    {
+        return Err(win_error("ConnectNamedPipe(stdin)"));
+    }
+    // Default pipe ACLs can admit local readers. Never expose the writer until the
+    // connected client is proven to be our own creating process. A collision or
+    // interception fails closed, before CreateProcessW or any input write.
+    let mut client_pid = 0;
+    if unsafe { GetNamedPipeClientProcessId(writer.get()?, &mut client_pid) } == 0 {
+        return Err(win_error("GetNamedPipeClientProcessId(stdin)"));
+    }
+    if client_pid != unsafe { GetCurrentProcessId() } {
+        return Err(failure(
+            "operation-failed",
+            "private input pipe peer mismatch",
+        ));
+    }
+    // The client handle retains its default blocking read mode, independently of
+    // the server's NOWAIT mode. Only this reader joins the child handle allowlist.
+    Ok((
+        reader,
+        InputPipe {
+            handle: writer,
+            broken: false,
+        },
+    ))
+}
+
+struct InputPipe {
+    handle: Handle,
+    broken: bool,
+}
+impl InputPipe {
+    fn write(&mut self, bytes: &[u8]) -> Result<Option<u32>> {
+        if bytes.is_empty() || bytes.len() > u32::MAX as usize {
+            return Err(failure(
+                "invalid-argument",
+                "stdin bytes must have positive unsigned 32-bit length",
+            ));
+        }
+        if self.broken {
+            return Ok(None);
+        }
+        let mut written = 0;
+        // One bounded kernel attempt prevents a large request from returning zero
+        // indefinitely on Windows even while the pipe is empty. No suffix is queued
+        // or retried; the caller observes the accepted prefix, including zero.
+        // https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-type-read-and-wait-modes
+        let requested = bytes.len().min(INPUT_PIPE_WRITE_LIMIT as usize) as u32;
+        if unsafe {
+            WriteFile(
+                self.handle.get()?,
+                bytes.as_ptr(),
+                requested,
+                &mut written,
+                null_mut(),
+            )
+        } == 0
+        {
+            let code = unsafe { GetLastError() };
+            if matches!(
+                code,
+                ERROR_BROKEN_PIPE | ERROR_NO_DATA | ERROR_PIPE_NOT_CONNECTED
+            ) {
+                self.broken = true;
+                self.handle.close()?;
+                return Ok(None);
+            }
+            // Preserve this error before cleanup or any further Windows call.
+            return Err(win_error("WriteFile(stdin)"));
+        }
+        if written > requested {
+            return Err(failure("incomplete", "invalid input pipe write length"));
+        }
+        Ok(Some(written))
+    }
 }
 
 struct Pipe {
@@ -828,6 +1041,7 @@ impl Pipe {
 pub struct NativeJobChild {
     process: Handle,
     pid: u32,
+    stdin: Option<InputPipe>,
     stdout: Pipe,
     stderr: Pipe,
 }
@@ -849,6 +1063,22 @@ impl NativeJobChild {
         self.stderr.read(max_bytes)
     }
     #[napi]
+    pub fn write_stdin(&mut self, bytes: Buffer) -> Result<Option<u32>> {
+        self.process.get()?;
+        self.stdin
+            .as_mut()
+            .ok_or_else(|| failure("invalid-argument", "stdin is not open for writing"))?
+            .write(&bytes)
+    }
+    #[napi]
+    pub fn close_stdin(&mut self) -> Result<()> {
+        self.process.get()?;
+        if let Some(mut input) = self.stdin.take() {
+            input.handle.close()?;
+        }
+        Ok(())
+    }
+    #[napi]
     pub fn exit_code(&self) -> Result<Option<u32>> {
         let handle = self.process.get()?;
         match unsafe { WaitForSingleObject(handle, 0) } {
@@ -865,10 +1095,14 @@ impl NativeJobChild {
     }
     #[napi]
     pub fn close(&mut self) -> Result<()> {
+        let stdin = self
+            .stdin
+            .take()
+            .map_or(Ok(()), |mut input| input.handle.close());
         let stdout = self.stdout.handle.close();
         let stderr = self.stderr.handle.close();
         let process = self.process.close();
-        stdout.and(stderr).and(process)
+        stdin.and(stdout).and(stderr).and(process)
     }
 }
 

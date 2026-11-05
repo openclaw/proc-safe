@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add opt-in private stdin for Windows Job children, with explicit nonblocking prefix writes, backpressure and broken-pipe observations, and owned EOF closure; default NUL input and atomic job admission are unchanged.
+
 - Harden build and release downloads against compromised CA keys with patched Node, pnpm, Bun, and Alpine system trust stores. Thanks @joshavant.
 
 ## 0.4.2 - 2026-10-19
