@@ -68,7 +68,8 @@ retry; the public release gate always uses the registry path.
 
 The Intel runner is required for the native x64 command-inspection contract: Rosetta
 deliberately reports that capability as unsupported. ARM64 CI separately verifies that refusal.
-Native addon deployment targets remain macOS 10.12 for x64 and macOS 11.0 for ARM64;
+Native addon deployment targets remain macOS 10.12 for x64 and macOS 11.0 for ARM64,
+and glibc 2.28 for Linux GNU (linked in a manylinux_2_28 container, then checked by symbol version);
 Node.js keeps its own supported operating-system requirements.
 
 To build and verify all release packages on current main without creating a tag or

@@ -21,9 +21,11 @@ jobs:
           - label: linux-x64-gnu
             os: ubuntu-latest
             arch: x64
+            glibc-floor: '2.28'
           - label: linux-arm64-gnu
             os: ubuntu-24.04-arm
             arch: arm64
+            glibc-floor: '2.28'
           - label: darwin-x64
             # Native Intel command inspection is intentionally unsupported under Rosetta.
             os: macos-26-intel
@@ -52,6 +54,29 @@ jobs:
         if: runner.os == 'macOS'
         run: echo 'MACOSX_DEPLOYMENT_TARGET=${{ matrix.macos-minimum }}' >> "$GITHUB_ENV"
       - run: pnpm native:build
+        if: runner.os != 'Linux'
+      # Linking on the runner would bind its newer glibc symbol versions; link against the floor instead.
+      - name: Build GNU addon against the glibc floor
+        if: runner.os == 'Linux'
+        env:
+          GLIBC_FLOOR: ${{ matrix.glibc-floor }}
+        run: |
+          node_root="$(dirname "$(dirname "$(command -v node)")")"
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e GLIBC_FLOOR \
+            -v "$node_root:/opt/node:ro" -v "$PWD:/work" -w /work \
+            "quay.io/pypa/manylinux_${GLIBC_FLOOR/./_}_$(uname -m)" sh -euxc '
+              test "$(ldd --version | head -n 1 | awk "{print \$NF}")" = "$GLIBC_FLOOR"
+              curl -fsSL https://sh.rustup.rs -o "$HOME/rustup-init.sh"
+              sh "$HOME/rustup-init.sh" -y --profile minimal --default-toolchain stable
+              export PATH="/opt/node/bin:$HOME/.cargo/bin:$PATH"
+              node scripts/build-native.mjs
+              node -e "process.dlopen({ exports: {} }, require(\"node:path\").resolve(process.argv[1]))" native/proc-safe-native.linux-*-gnu.node
+            '
+      - name: Verify native glibc floor
+        if: runner.os == 'Linux'
+        run: |
+          required=$(objdump -T native/proc-safe-native.linux-${{ matrix.arch }}-gnu.node | grep -o 'GLIBC_[0-9][0-9.]*' | cut -d_ -f2 | sort -uV | tail -n 1)
+          test "$(printf '%s\n%s\n' "$required" '${{ matrix.glibc-floor }}' | sort -V | tail -n 1)" = '${{ matrix.glibc-floor }}'
       - name: Verify native macOS minimum
         if: runner.os == 'macOS'
         run: |
