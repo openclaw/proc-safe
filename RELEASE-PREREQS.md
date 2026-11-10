@@ -16,6 +16,11 @@ Finalize a dated, nonempty changelog section and verify `pnpm release:notes X.Y.
 Run `pnpm check`, `cargo test --workspace --locked`, `cargo clippy --workspace --locked -- -D warnings`,
 `pnpm native:build`, `pnpm package:smoke`, and `git diff --check`. All ten native bindings must
 pass main-thread and Worker runtime checks. Host-only smoke is not foreign-platform proof.
+Windows staging and package collection also verify x64/ARM64 PE dependencies: OS UCRT
+must remain dynamic, with no external VC redistributable dependency. Tool-equipped
+Windows CI runners can mask missing runtime prerequisites. Keep clean-Windows proof
+separate: run the exact packed root/platform tarballs without a VC redistributable
+on Node 22 and 24, on main and Worker threads, and record architecture-specific gaps.
 
 Apply the coordinator-approved branch/tag rulesets first. The annotated protected `vX.Y.Z`
 tag must point to reviewed, green, latest main. Never move a release tag. The workflow validates

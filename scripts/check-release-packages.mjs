@@ -8,6 +8,7 @@ import { nativeTargets, hostNativeTarget, nativePackageDirectory } from "./nativ
 import { resolveNpmCli } from "./npm-cli.mjs";
 import { normalizePackResult } from "./npm-pack-result.mjs";
 import { startConsumerRegistry } from "./consumer-registry.mjs";
+import { verifyWindowsRuntime } from "./windows-runtime.mjs";
 
 const run = promisify(execFile);
 const npm = resolveNpmCli();
@@ -33,6 +34,7 @@ function pack(directory) {
 for (const target of targets) {
   const directory = nativePackageDirectory(target);
   assert.ok(existsSync(new URL("proc-safe-native.node", directory)), `missing binary ${target.label}`);
+  if (target.os === "win32") verifyWindowsRuntime(readFileSync(new URL("proc-safe-native.node", directory)), target.cpu);
   assert.ok(!readFileSync(new URL("proc-safe-native.node", directory)).includes(Buffer.from("failNextWindowsJobAssignment")), `fault injection is forbidden in published artifacts: ${target.label}`);
   assert.ok(!readFileSync(new URL("proc-safe-native.node", directory)).includes(Buffer.from("openWindowsPinWithoutDebug")), `test impersonation is forbidden in published artifacts: ${target.label}`);
   assert.ok(!readFileSync(new URL("proc-safe-native.node", directory)).includes(Buffer.from("interceptNextWindowsJobInput")), `test interception is forbidden in published artifacts: ${target.label}`);

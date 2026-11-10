@@ -14,6 +14,9 @@ pnpm package:smoke
 ```
 
 Windows PowerShell: set `$env:PROC_SAFE_NATIVE = 'require'` before running checks.
+Build distributable bindings through `pnpm native:build`, not bare Cargo: the Windows
+producer links compiler support statically and the OS UCRT dynamically, and verifies
+the resulting PE dependencies before staging.
 See [native architecture](docs/native.md) and [release prerequisites](RELEASE-PREREQS.md).
 
 Keep each new capability in one TypeScript subpath and one Rust module. Name capabilities,
