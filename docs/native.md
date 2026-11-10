@@ -130,3 +130,9 @@ with `TokenIsAppContainer`, then `TokenAppContainerSid` only when contained. Rus
 validates returned lengths and the SID bounds before converting it to a string,
 and closes the token handle on every path. Queries are fresh on the calling
 thread; thread impersonation does not change which process token is inspected.
+
+Filesystem-restricted launch uses a separate single-threaded binary, packaged alongside
+the Linux addon. It creates a Landlock ruleset and sets no-new-privileges before exec,
+so all target runtime threads inherit the same domain. The TypeScript API prepares
+arguments without spawning or loading the addon; the existing caller owns descriptors,
+child supervision and filesystem policy. See [filesystem launch](filesystem-launch.md).

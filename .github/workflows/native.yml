@@ -141,7 +141,9 @@ jobs:
         if: matrix.node == '24.22.1'
         with:
           name: binding-${{ matrix.label }}
-          path: native/*.node
+          path: |
+            native/*.node
+            native/proc-safe-filesystem-launch.*
           if-no-files-found: error
   musl:
     name: Native (${{ matrix.label }}, Node ${{ matrix.node-major }})
@@ -200,7 +202,9 @@ jobs:
         if: matrix.node == '24.22.1'
         with:
           name: binding-${{ matrix.label }}
-          path: native/*.node
+          path: |
+            native/*.node
+            native/proc-safe-filesystem-launch.*
           if-no-files-found: error
   freebsd:
     name: Native (freebsd-${{ matrix.cpu }}, Node ${{ matrix.node-major }})
