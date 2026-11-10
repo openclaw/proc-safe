@@ -239,7 +239,7 @@ jobs:
           prepare: pkg install -y node${{ matrix.node-major }} npm-node${{ matrix.node-major }} rust gmake
           run: |
             set -eu
-            node -e "if(process.platform !== 'freebsd' || process.arch !== '${{ matrix.cpu }}') throw new Error('wrong runtime')"
+            node scripts/check-ci-runtime.mjs freebsd '${{ matrix.cpu }}' '${{ matrix.node }}'
             node scripts/build-native.mjs
             PROC_SAFE_NATIVE=require node --test scripts/native-runtime.test.mjs
             node scripts/check-release-packages.mjs --allow-host-only --npm-only
