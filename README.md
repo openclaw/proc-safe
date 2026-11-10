@@ -168,7 +168,9 @@ if (owner) bindCurrentProcessLifetimeTo(owner);
 ```
 
 Children join the Job atomically at creation, inherit only the handles you allow, and stream
-output without blocking. Pins request least-privilege access by intended use. Lifetime transfer
+output without blocking. Opt-in `stdin: "pipe"` adds explicit `writeStdin(Buffer)` prefix
+attempts and `closeStdin()` without automatic input release; NUL remains the default.
+Pins request least-privilege access by intended use. Lifetime transfer
 rolls back cleanly if anything fails halfway. [Windows jobs](docs/windows-job.md).
 
 ## Linux child reaping

@@ -7,6 +7,7 @@ import { getNativeBinding, validatePid } from "./native.js";
 export type WindowsJobSpawnOptions = {
   readonly executable: string;
   readonly commandLine: string;
+  readonly stdin?: "null" | "pipe";
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string>>;
 };
@@ -72,6 +73,9 @@ export class WindowsJob implements Disposable {
     const job = nativeOwner(jobs, this);
     text(options.executable, "executable");
     text(options.commandLine, "commandLine");
+    if (options.stdin !== undefined && options.stdin !== "null" && options.stdin !== "pipe") {
+      throw new ProcSafeError("invalid-argument", "stdin must be null or pipe");
+    }
     if (options.cwd !== undefined) text(options.cwd, "cwd");
     let environment: string[] | undefined;
     if (options.env !== undefined) {
@@ -87,7 +91,7 @@ export class WindowsJob implements Disposable {
         return `${name}=${value}`;
       }).sort((a, b) => a.toUpperCase() < b.toUpperCase() ? -1 : a.toUpperCase() > b.toUpperCase() ? 1 : 0);
     }
-    return createChild(call(() => job.spawn(options.executable, options.commandLine, options.cwd, environment)));
+    return createChild(call(() => job.spawn(options.executable, options.commandLine, options.cwd, environment, options.stdin === "pipe")));
   }
   processIds(): number[] { return call(() => nativeOwner(jobs, this).processIds()); }
   accounting(): { readonly activeProcesses: number; readonly totalProcesses: number; readonly terminatedProcesses: number } {
@@ -110,6 +114,14 @@ export class WindowsJobChild implements Disposable {
   get pid(): number { return call(() => nativeOwner(children, this).pid); }
   readStdout(maxBytes: number): Buffer | null { uint(maxBytes, "maxBytes", 1); return call(() => nativeOwner(children, this).readStdout(maxBytes)); }
   readStderr(maxBytes: number): Buffer | null { uint(maxBytes, "maxBytes", 1); return call(() => nativeOwner(children, this).readStderr(maxBytes)); }
+  /** A positive result has already released that prefix; acceptance is not consumption. */
+  writeStdin(bytes: Buffer): number | null {
+    if (!Buffer.isBuffer(bytes) || bytes.length === 0 || bytes.length > 0xffffffff) {
+      throw new ProcSafeError("invalid-argument", "stdin bytes must be a nonempty Buffer with unsigned 32-bit length");
+    }
+    return call(() => nativeOwner(children, this).writeStdin(bytes));
+  }
+  closeStdin(): void { call(() => nativeOwner(children, this).closeStdin()); }
   exitCode(): number | null { return call(() => nativeOwner(children, this).exitCode()); }
   close(): void {
     const resource = children.get(this);
