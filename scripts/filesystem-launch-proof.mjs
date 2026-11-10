@@ -50,7 +50,7 @@ async function prove() {
     args: [target, root, workspace, privateRoot],
     cwd: workspace,
     env: { PROC_SAFE_LAUNCH_TEST: "target=only" },
-    readOnlyPaths: ["/usr", "/lib", "/lib64", "/etc/ld.so.cache", "/etc/ssl", "/etc/pki", "/proc", root].filter(existsSync),
+    readOnlyPaths: [process.execPath, "/usr", "/lib", "/lib64", "/etc/ld.so.cache", "/etc/ssl", "/etc/pki", "/proc", root].filter(existsSync),
     readWritePaths: [workspace, "/dev/null"],
   };
   let child;

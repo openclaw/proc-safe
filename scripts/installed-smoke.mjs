@@ -47,6 +47,23 @@ async function probe(version, target) {
   };
   for (const [subpath, module] of Object.entries(modules)) {
     if ([".", "./errors"].includes(subpath)) continue;
+    if (subpath === "./filesystem-launch") {
+      assert.equal(typeof module.prepareFilesystemRestrictedLaunch, "function");
+      const options = {
+        executable: process.execPath,
+        args: ["-e", "process.stdout.write('filesystem-launch-ok')"],
+        readOnlyPaths: ["/"],
+        readWritePaths: [],
+      };
+      if (process.platform === "linux") {
+        // Exercise the installed executable, not a workspace copy or native addon probe.
+        const launch = module.prepareFilesystemRestrictedLaunch(options);
+        assert.equal(execFileSync(launch.command, launch.args, { encoding: "utf8", timeout: 5000 }), "filesystem-launch-ok");
+      } else {
+        assert.throws(() => module.prepareFilesystemRestrictedLaunch(options), { code: "unsupported-platform" });
+      }
+      continue;
+    }
     assert.equal(typeof module.isSupported, "function", `${subpath}.isSupported`);
     const supported = module.isSupported();
     if (subpath === "./systemd") {
