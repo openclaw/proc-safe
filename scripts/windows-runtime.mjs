@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 
-export function verifyWindowsRuntime(binary, cpu) {
-  const check = (condition, message) => assert.ok(condition, `Invalid Windows addon: ${message}`);
+export const windowsRuntimeFlags = ["-Ctarget-feature=+crt-static", "-Clink-arg=/NODEFAULTLIB:libucrt.lib", "-Clink-arg=ucrt.lib"];
+
+export function verifyWindowsRuntime(binary, cpu, { dll = true } = {}) {
+  const check = (condition, message) => assert.ok(condition, `Invalid Windows binary: ${message}`);
   const range = (offset, size, limit = binary.length) => {
     check(Number.isSafeInteger(offset) && offset >= 0 && size >= 0 && offset + size <= limit, "truncated PE data");
   };
@@ -11,16 +13,17 @@ export function verifyWindowsRuntime(binary, cpu) {
   range(pe, 24);
   check(pe >= 64 && binary.readUInt32LE(pe) === 0x4550, "missing PE signature");
   const machine = binary.readUInt16LE(pe + 4);
-  check((cpu === "x64" && machine === 0x8664) || (cpu === "arm64" && machine === 0xaa64), `wrong machine for ${cpu}`);
-  check((binary.readUInt16LE(pe + 22) & 0x2000) !== 0, "expected a DLL");
+  check((cpu === "x86" && machine === 0x14c) || (cpu === "x64" && machine === 0x8664) || (cpu === "arm64" && machine === 0xaa64), `wrong machine for ${cpu}`);
+  check(((binary.readUInt16LE(pe + 22) & 0x2000) !== 0) === dll, dll ? "expected a DLL" : "expected an executable");
   const optional = pe + 24;
   const optionalSize = binary.readUInt16LE(pe + 20);
   range(optional, optionalSize);
-  check(optionalSize >= 112 && binary.readUInt16LE(optional) === 0x20b, "expected PE32+");
+  const directoryOffset = cpu === "x86" ? 96 : 112;
+  check(optionalSize >= directoryOffset && binary.readUInt16LE(optional) === (cpu === "x86" ? 0x10b : 0x20b), cpu === "x86" ? "expected PE32" : "expected PE32+");
   const imageSize = binary.readUInt32LE(optional + 56);
   const headerSize = binary.readUInt32LE(optional + 60);
-  const directories = binary.readUInt32LE(optional + 108);
-  check(directories <= 16 && 112 + directories * 8 <= optionalSize, "invalid data directories");
+  const directories = binary.readUInt32LE(optional + directoryOffset - 4);
+  check(directories <= 16 && directoryOffset + directories * 8 <= optionalSize, "invalid data directories");
   const sectionCount = binary.readUInt16LE(pe + 6);
   const sectionTable = optional + optionalSize;
   check(sectionCount > 0 && sectionTable + sectionCount * 40 <= headerSize, "invalid section table");
@@ -60,7 +63,7 @@ export function verifyWindowsRuntime(binary, cpu) {
   };
   const imports = (directory, stride, nameOffset, delay = false) => {
     if (directory >= directories) return [];
-    const entry = optional + 112 + directory * 8;
+    const entry = optional + directoryOffset + directory * 8;
     const rva = binary.readUInt32LE(entry);
     const size = binary.readUInt32LE(entry + 4);
     if (rva === 0 && size === 0) return [];
@@ -69,7 +72,7 @@ export function verifyWindowsRuntime(binary, cpu) {
     const names = [];
     for (let current = offset; current + stride <= offset + size; current += stride) {
       if (binary.subarray(current, current + stride).every(byte => byte === 0)) return names;
-      // PE32+ delay descriptors use RVAs, not legacy 32-bit virtual addresses.
+      // Require RVA-based delay descriptors, not legacy virtual addresses.
       if (delay) check(binary.readUInt32LE(current) === 1, "invalid delay-import attributes");
       names.push(dllName(binary.readUInt32LE(current + nameOffset)));
     }

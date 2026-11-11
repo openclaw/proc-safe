@@ -17,6 +17,11 @@ Windows PowerShell: set `$env:PROC_SAFE_NATIVE = 'require'` before running check
 Build distributable bindings through `pnpm native:build`, not bare Cargo: the Windows
 producer links compiler support statically and the OS UCRT dynamically, and verifies
 the resulting PE dependencies before staging.
+Build the separate 32-bit Windows inspection fixture with
+`node scripts/build-windows-inspect-fixture.mjs` after installing the
+`i686-pc-windows-msvc` Rust target. It shares the Windows linkage policy and
+verifies the resulting executable's imports; bare `rustc` defaults would
+reintroduce a VC redistributable prerequisite.
 See [native architecture](docs/native.md) and [release prerequisites](RELEASE-PREREQS.md).
 
 Keep each new capability in one TypeScript subpath and one Rust module. Name capabilities,

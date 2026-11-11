@@ -1,20 +1,21 @@
 import { expect, test } from "vitest";
 import { verifyWindowsRuntime } from "../scripts/windows-runtime.mjs";
 
-function image(cpu: "x64" | "arm64", direct: string[], delayed: string[] = []) {
+function image(cpu: "x86" | "x64" | "arm64", direct: string[], delayed: string[] = []) {
   const bytes = Buffer.alloc(4096);
   bytes.writeUInt16LE(0x5a4d, 0);
   bytes.writeUInt32LE(128, 60);
   bytes.writeUInt32LE(0x4550, 128);
-  bytes.writeUInt16LE(cpu === "x64" ? 0x8664 : 0xaa64, 132);
+  bytes.writeUInt16LE(cpu === "x86" ? 0x14c : cpu === "x64" ? 0x8664 : 0xaa64, 132);
   bytes.writeUInt16LE(1, 134);
   bytes.writeUInt16LE(240, 148);
   bytes.writeUInt16LE(0x2000, 150);
   const optional = 152;
-  bytes.writeUInt16LE(0x20b, optional);
+  bytes.writeUInt16LE(cpu === "x86" ? 0x10b : 0x20b, optional);
   bytes.writeUInt32LE(8192, optional + 56);
   bytes.writeUInt32LE(512, optional + 60);
-  bytes.writeUInt32LE(16, optional + 108);
+  const directoryOffset = cpu === "x86" ? 96 : 112;
+  bytes.writeUInt32LE(16, optional + directoryOffset - 4);
   bytes.writeUInt32LE(4096, 404);
   bytes.writeUInt32LE(3584, 408);
   bytes.writeUInt32LE(512, 412);
@@ -24,8 +25,8 @@ function image(cpu: "x64" | "arm64", direct: string[], delayed: string[] = []) {
     [13, 1024, 32, 4, delayed],
   ] as const) {
     if (!names.length) continue;
-    bytes.writeUInt32LE(tableOffset + 3584, optional + 112 + directory * 8);
-    bytes.writeUInt32LE((names.length + 1) * stride, optional + 116 + directory * 8);
+    bytes.writeUInt32LE(tableOffset + 3584, optional + directoryOffset + directory * 8);
+    bytes.writeUInt32LE((names.length + 1) * stride, optional + directoryOffset + 4 + directory * 8);
     for (const [index, name] of names.entries()) {
       const descriptor = tableOffset + index * stride;
       if (directory === 13) bytes.writeUInt32LE(1, descriptor);
@@ -43,6 +44,19 @@ test.each(["x64", "arm64"] as const)("accepts OS UCRT imports on %s and rejects 
     cpu, imports: ["api-ms-win-crt-runtime-l1-1-0.dll", "kernel32.dll"], delayImports: ["ucrtbase.dll"],
   });
   expect(() => verifyWindowsRuntime(bytes, cpu === "x64" ? "arm64" : "x64")).toThrow("wrong machine");
+});
+
+test("validates PE32 executables without relaxing release DLL checks", () => {
+  const executable = image("x86", ["api-ms-win-crt-runtime-l1-1-0.dll"], ["ucrtbase.dll"]);
+  executable.writeUInt16LE(2, 150);
+  expect(verifyWindowsRuntime(executable, "x86", { dll: false }).delayImports).toEqual(["ucrtbase.dll"]);
+  expect(() => verifyWindowsRuntime(executable, "x86")).toThrow("expected a DLL");
+  expect(() => verifyWindowsRuntime(image("x64", ["ucrtbase.dll"]), "x64", { dll: false })).toThrow("expected an executable");
+  for (const [direct, delayed] of [[["ucrtbase.dll", "VCRUNTIME140.dll"], []], [["ucrtbase.dll"], ["VCRUNTIME140.dll"]]]) {
+    const bytes = image("x86", direct, delayed);
+    bytes.writeUInt16LE(2, 150);
+    expect(() => verifyWindowsRuntime(bytes, "x86", { dll: false })).toThrow("VC redistributable");
+  }
 });
 
 test.each(["VCRUNTIME140.dll", "vcruntime140_1.dll", "MSVCP140_2.dll", "concrt140.dll", "vcomp140.dll", "msvcr120.dll", "ucrtbased.dll"])(

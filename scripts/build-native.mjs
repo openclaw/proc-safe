@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, copyFileSync, readFileSync } from "node:fs";
 import { nativeTargets, hostNativeTarget, nativePackageDirectory, filesystemLauncherArtifact } from "./native-targets.mjs";
-import { verifyWindowsRuntime } from "./windows-runtime.mjs";
+import { verifyWindowsRuntime, windowsRuntimeFlags } from "./windows-runtime.mjs";
 const requested = process.argv[2];
 const target = requested ? nativeTargets.find(t => t.rust === requested) : hostNativeTarget();
 if (!target) throw new Error(`unsupported native build target: ${requested ?? process.platform + '-' + process.arch}`);
@@ -10,10 +10,9 @@ const env = { ...process.env };
 if (target.libc === "musl") env.RUSTFLAGS = `${env.RUSTFLAGS ?? ""} -C target-feature=-crt-static`.trim();
 if (target.os === "win32") {
   // Keep the OS-serviced UCRT dynamic, but embed compiler-specific runtime support.
-  const flags = ["-Ctarget-feature=+crt-static", "-Clink-arg=/NODEFAULTLIB:libucrt.lib", "-Clink-arg=ucrt.lib"];
   if (env.CARGO_ENCODED_RUSTFLAGS !== undefined) {
-    env.CARGO_ENCODED_RUSTFLAGS = [env.CARGO_ENCODED_RUSTFLAGS, ...flags].filter(Boolean).join("\x1f");
-  } else env.RUSTFLAGS = `${env.RUSTFLAGS ?? ""} ${flags.join(" ")}`.trim();
+    env.CARGO_ENCODED_RUSTFLAGS = [env.CARGO_ENCODED_RUSTFLAGS, ...windowsRuntimeFlags].filter(Boolean).join("\x1f");
+  } else env.RUSTFLAGS = `${env.RUSTFLAGS ?? ""} ${windowsRuntimeFlags.join(" ")}`.trim();
 }
 execFileSync("cargo", ["build", "--workspace", "--locked", "--release", "--no-default-features", "--target", target.rust], { cwd: root, stdio: "inherit", env });
 const library = target.os === "win32" ? "proc_safe_native.dll" : target.os === "darwin" ? "libproc_safe_native.dylib" : "libproc_safe_native.so";
