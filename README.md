@@ -73,8 +73,9 @@ Every capability is its own subpath, so you only load what you use.
 | [`/test-support`](docs/test-support.md) | Test fixtures: seccomp group-kill denial, raw console-free spawns | Linux, Windows |
 | `/errors` | `ProcSafeError` and its codes | everywhere |
 
-Every capability subpath imports on every platform and exports `isSupported()`, which never throws.
-Calling a capability where it doesn't exist throws `unsupported-platform` — no silent no-ops.
+Capability subpaths import on every platform. Most export a non-throwing `isSupported()` probe.
+For `/filesystem-launch`, preparation checks the platform and locates the helper. The helper
+checks kernel support at launch and exits before starting the target if it cannot apply the restrictions.
 
 ## Three outcomes, never guess
 
