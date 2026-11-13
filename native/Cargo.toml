@@ -29,6 +29,10 @@ cc = "1.7.0"
 napi-build = "2.6.0"
 
 [[bin]]
+name = "proc-safe-filesystem-launch"
+path = "src/bin/filesystem-launch.rs"
+
+[[bin]]
 name = "proc-safe-retained-fixture"
 path = "../test/fixtures/windows-retained-exit.rs"
 

@@ -36,6 +36,10 @@ for (const target of targets) {
   assert.ok(!readFileSync(new URL("proc-safe-native.node", directory)).includes(Buffer.from("failNextWindowsJobAssignment")), `fault injection is forbidden in published artifacts: ${target.label}`);
   assert.ok(!readFileSync(new URL("proc-safe-native.node", directory)).includes(Buffer.from("openWindowsPinWithoutDebug")), `test impersonation is forbidden in published artifacts: ${target.label}`);
   assert.ok(!readFileSync(new URL("proc-safe-native.node", directory)).includes(Buffer.from("interceptNextWindowsJobInput")), `test interception is forbidden in published artifacts: ${target.label}`);
+  if (target.os === "linux") {
+    const launcher = new URL("proc-safe-filesystem-launch", directory);
+    assert.ok(existsSync(launcher), `missing filesystem launcher ${target.label}`);
+  }
   pack(directory);
 }
 pack(new URL("../", import.meta.url));
@@ -64,6 +68,13 @@ try {
       import * as inspect from '@openclaw/proc-safe/inspect';
       import * as windowsJobs from '@openclaw/proc-safe/windows-job';
       import * as windowsToken from '@openclaw/proc-safe/windows-token';
+      import { prepareFilesystemRestrictedLaunch } from '@openclaw/proc-safe/filesystem-launch';
+      import { execFileSync } from 'node:child_process';
+      if (process.platform === 'linux') {
+        const launch = prepareFilesystemRestrictedLaunch({ executable: process.execPath,
+          args: ['-e', 'process.stdout.write("filesystem-launch")'], readOnlyPaths: ['/'], readWritePaths: [] });
+        assert.equal(execFileSync(launch.command, launch.args, { encoding: 'utf8' }), 'filesystem-launch');
+      }
       assert.equal(windowsToken.isSupported(), process.platform === 'win32');
       if (process.platform === 'win32') assert.equal(windowsToken.readCurrentAppContainerSid(), null);
       const require = createRequire(import.meta.url);
@@ -107,6 +118,13 @@ try {
       if (inspect.isSupported() && !inspect.readProcessCommand(process.pid).argv.length) throw new Error('missing command');
       import * as windowsJobs from '@openclaw/proc-safe/windows-job';
       import * as windowsToken from '@openclaw/proc-safe/windows-token';
+      import { prepareFilesystemRestrictedLaunch } from '@openclaw/proc-safe/filesystem-launch';
+      import { execFileSync } from 'node:child_process';
+      if (process.platform === 'linux') {
+        const launch = prepareFilesystemRestrictedLaunch({ executable: process.execPath,
+          args: ['-e', 'process.stdout.write("filesystem-launch")'], readOnlyPaths: ['/'], readWritePaths: [] });
+        assert.equal(execFileSync(launch.command, launch.args, { encoding: 'utf8' }), 'filesystem-launch');
+      }
       assert.equal(windowsToken.isSupported(), process.platform === 'win32');
       if (process.platform === 'win32') assert.equal(windowsToken.readCurrentAppContainerSid(), null);
       assert.equal(windowsJobs.isSupported(), process.platform === 'win32');

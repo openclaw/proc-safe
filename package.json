@@ -84,6 +84,10 @@
     "./windows-token": {
       "types": "./dist/windows-token.d.ts",
       "default": "./dist/windows-token.js"
+    },
+    "./filesystem-launch": {
+      "types": "./dist/filesystem-launch.d.ts",
+      "default": "./dist/filesystem-launch.js"
     }
   },
   "scripts": {
