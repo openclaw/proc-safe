@@ -21,7 +21,7 @@ test.runIf(process.platform === "linux")("invalid paths and target environment f
   }
 });
 
-test.runIf(process.platform === "linux" && process.env.PROC_SAFE_NATIVE === "require")("real filesystem boundary, exec inheritance and failed setup on main and Worker", () => {
+test.runIf(process.platform === "linux" && process.env.PROC_SAFE_NATIVE === "require")("real filesystem boundary, exec inheritance, shell rejection and failed setup on main and Worker", () => {
   const result = execFileSync(process.execPath, ["scripts/filesystem-launch-proof.mjs"], { encoding: "utf8", timeout: 10_000 });
   expect(result.trim()).toBe("filesystem launch: main and Worker passed");
 });

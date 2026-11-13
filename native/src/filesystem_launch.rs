@@ -1,10 +1,9 @@
+use std::collections::BTreeMap;
 use std::ffi::{CString, OsString};
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
-use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 const EXECUTE: u64 = 1;
 const WRITE_FILE: u64 = 1 << 1;
@@ -206,5 +205,36 @@ pub fn run() -> io::Result<()> {
     // overrides are applied after restriction, not to the trusted launcher.
     // Exec retains the caller's explicit IPC/stdio contract and the restriction;
     // every thread and descendant the target creates starts inside this domain.
-    Err(Command::new(executable).args(args).envs(environment).exec())
+    let arguments = std::iter::once(executable.into_os_string())
+        .chain(args)
+        .map(|value| CString::new(value.into_vec()))
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut target_environment = std::env::vars_os().collect::<BTreeMap<_, _>>();
+    target_environment.extend(environment);
+    let target_environment = target_environment
+        .into_iter()
+        .map(|(mut key, value)| {
+            key.push("=");
+            key.push(value);
+            CString::new(key.into_vec())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut argv = arguments
+        .iter()
+        .map(|value| value.as_ptr())
+        .collect::<Vec<_>>();
+    argv.push(std::ptr::null());
+    let mut envp = target_environment
+        .iter()
+        .map(|value| value.as_ptr())
+        .collect::<Vec<_>>();
+    envp.push(std::ptr::null());
+    // Match Command::exec's reset of the disposition changed by Rust's runtime.
+    if unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) } == libc::SIG_ERR {
+        return Err(io::Error::last_os_error());
+    }
+    // The C strings outlive these null-terminated pointer arrays. Unlike execvp,
+    // execve returns ENOEXEC for an invalid executable without invoking a shell.
+    unsafe { libc::execve(arguments[0].as_ptr(), argv.as_ptr(), envp.as_ptr()) };
+    Err(io::Error::last_os_error())
 }

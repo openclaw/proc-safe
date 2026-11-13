@@ -34,8 +34,10 @@ from other writers and validate application-specific root relationships.
 The single-threaded helper applies Linux Landlock and `no_new_privs` before
 executing the target. It requires Landlock ABI 3 or later, including referral
 and truncation restrictions. Missing paths, unsupported kernels and setup errors
-exit with status 126 without executing the target. There is no unrestricted
-fallback. The wrapper then becomes the target: PID, environment, selected
+exit with status 126 without executing the target. Invalid executable formats
+also exit 126, with no shell fallback; valid shebang scripts use their declared
+interpreter. There is no unrestricted fallback. The wrapper then becomes the
+target: PID, environment, selected
 inheritable descriptors and process-group ownership are retained. Optional `env` overrides
 apply only to the target after restriction; they do not change the calling process or
 the helper's startup environment. Overrides appear in helper arguments; use only

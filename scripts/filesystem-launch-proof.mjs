@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdtempSync, mkdirSync, openSync, closeSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, openSync, closeSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Worker, isMainThread, parentPort } from "node:worker_threads";
@@ -50,7 +50,7 @@ async function prove() {
     args: [target, root, workspace, privateRoot],
     cwd: workspace,
     env: { PROC_SAFE_LAUNCH_TEST: "target=only" },
-    readOnlyPaths: [process.execPath, "/usr", "/lib", "/lib64", "/etc/ld.so.cache", "/etc/ssl", "/etc/pki", "/proc", root].filter(existsSync),
+    readOnlyPaths: [process.execPath, "/bin/sh", "/usr", "/lib", "/lib64", "/etc/ld.so.cache", "/etc/ssl", "/etc/pki", "/proc", root].filter(existsSync),
     readWritePaths: [workspace, "/dev/null"],
   };
   let child;
@@ -90,6 +90,23 @@ async function prove() {
     child.stderr.resume();
     assert.deepEqual(await failed, [126, null]);
     assert.equal(existsSync(marker), false);
+    // An invalid executable must not be reinterpreted by a libc shell fallback.
+    const script = join(root, "script");
+    const scriptMarker = join(workspace, "script-started");
+    const scriptBody = 'printf "%s\\n" "$PROC_SAFE_LAUNCH_TEST" "$1" > "$2"\n';
+    writeFileSync(script, scriptBody);
+    chmodSync(script, 0o755);
+    const scriptLaunch = prepareFilesystemRestrictedLaunch({ ...options,
+      executable: script, args: ["literal $HOME; *", scriptMarker],
+    });
+    child = spawn(scriptLaunch.command, scriptLaunch.args, { stdio: "ignore" });
+    assert.deepEqual(await once(child, "close"), [126, null]);
+    assert.equal(existsSync(scriptMarker), false);
+    // Valid shebang scripts still use the kernel-selected interpreter.
+    writeFileSync(script, "#!/bin/sh\n" + scriptBody);
+    child = spawn(scriptLaunch.command, scriptLaunch.args, { stdio: "ignore" });
+    assert.deepEqual(await once(child, "close"), [0, null]);
+    assert.equal(readFileSync(scriptMarker, "utf8"), "target=only\nliteral $HOME; *\n");
   } finally {
     if (child && child.exitCode === null && child.signalCode === null) {
       const closed = once(child, "close");

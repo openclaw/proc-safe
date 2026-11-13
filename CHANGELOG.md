@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Add Linux filesystem-restricted launch: prepare a native helper that enforces caller-supplied paths before target execution, preserving the existing supervisor and explicit inherited descriptors. Requires Landlock ABI 3 or later and fails closed when unavailable.
+- Add Linux filesystem-restricted launch: prepare a native helper that enforces caller-supplied paths before target execution, preserving the existing supervisor and explicit inherited descriptors. Requires Landlock ABI 3 or later, fails closed when unavailable, and rejects invalid executable formats without a shell fallback.
 
 ## 0.5.0 - 2026-11-05
 
