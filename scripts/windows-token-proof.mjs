@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { once } from "node:events";
-import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -11,6 +11,7 @@ import { isMainThread, parentPort, Worker, workerData } from "node:worker_thread
 import { isSupported, readCurrentAppContainerSid } from "../dist/windows-token.js";
 import { ProcSafeError } from "../dist/errors.js";
 import { hostNativeTarget, nativePackageDirectory } from "./native-targets.mjs";
+import { removeProofDirectory } from "./remove-proof-directory.mjs";
 
 function observe(mode, expected) {
   if (mode === "disabled" || process.platform !== "win32") {
@@ -100,6 +101,7 @@ if (!isMainThread) {
       mkdirSync(scripts);
       copyFileSync(fileURLToPath(new URL(import.meta.url)), join(scripts, "windows-token-proof.mjs"));
       copyFileSync(fileURLToPath(new URL("./native-targets.mjs", import.meta.url)), join(scripts, "native-targets.mjs"));
+      copyFileSync(fileURLToPath(new URL("./remove-proof-directory.mjs", import.meta.url)), join(scripts, "remove-proof-directory.mjs"));
       const packagePath = join(directory, "node_modules", target.package);
       cpSync(nativePackageDirectory(target), packagePath, { recursive: true });
       let expected;
@@ -119,7 +121,7 @@ if (!isMainThread) {
       contained = JSON.parse(readFileSync(join(directory, "result.json"), "utf8"));
       assert.deepEqual(contained, { main: expected, worker: expected });
     } finally {
-      rmSync(directory, { recursive: true, force: true });
+      await removeProofDirectory(directory);
     }
     const deniedDirectory = mkdtempSync(join(tmpdir(), "proc-safe-token-denied-"));
     try {
@@ -128,7 +130,7 @@ if (!isMainThread) {
         timeout: 35_000,
       });
     } finally {
-      rmSync(deniedDirectory, { recursive: true, force: true });
+      await removeProofDirectory(deniedDirectory);
     }
   }
   console.log(JSON.stringify({ platform: process.platform, arch: process.arch,
