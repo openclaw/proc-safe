@@ -92,18 +92,31 @@ jobs:
         run: |
           rustup target add i686-pc-windows-msvc
           node scripts/build-windows-inspect-fixture.mjs
+      - name: Build temporary hangup tracer
+        if: runner.os == 'macOS'
+        run: cc -dynamiclib test/fixtures/trace-hangup.c -o "$RUNNER_TEMP/trace-hangup.dylib"
       - name: Native Node contracts and main/Worker proof
         env:
           PROC_SAFE_NATIVE: require
         # Process-heavy Windows fixtures share runner CPU; retain every per-test deadline.
-        run: pnpm test --fileParallelism=${{ runner.os != 'Windows' }}
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            export DYLD_INSERT_LIBRARIES="$RUNNER_TEMP/trace-hangup.dylib"
+          fi
+          pnpm test --fileParallelism=${{ runner.os != 'Windows' }} --reporter=verbose
+        shell: bash
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: 1.4.4
       - name: Native Bun contracts and main/Worker proof
         env:
           PROC_SAFE_NATIVE: require
-        run: pnpm test:bun --fileParallelism=${{ runner.os != 'Windows' }}
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            export DYLD_INSERT_LIBRARIES="$RUNNER_TEMP/trace-hangup.dylib"
+          fi
+          pnpm test:bun --fileParallelism=${{ runner.os != 'Windows' }} --reporter=verbose
+        shell: bash
       - name: Real systemd cross-user machine bridge on Node and Bun
         if: runner.os == 'Linux'
         run: |
