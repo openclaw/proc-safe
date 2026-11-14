@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, copyFileSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { nativeTargets, hostNativeTarget, nativePackageDirectory, filesystemLauncherArtifact } from "./native-targets.mjs";
 import { verifyWindowsRuntime, windowsRuntimeFlags } from "./windows-runtime.mjs";
 const requested = process.argv[2];
@@ -17,6 +18,11 @@ if (target.os === "win32") {
 execFileSync("cargo", ["build", "--workspace", "--locked", "--release", "--no-default-features", "--target", target.rust], { cwd: root, stdio: "inherit", env });
 const library = target.os === "win32" ? "proc_safe_native.dll" : target.os === "darwin" ? "libproc_safe_native.dylib" : "libproc_safe_native.so";
 const source = new URL(`target/${target.rust}/release/${library}`, root);
+if (target.os === "darwin") {
+  // The linker signs ARM64 implicitly; sign both architectures before staging identical bytes.
+  execFileSync("codesign", ["--force", "--sign", "-", fileURLToPath(source)], { stdio: "inherit" });
+  execFileSync("codesign", ["--verify", "--strict", fileURLToPath(source)], { stdio: "inherit" });
+}
 if (target.os === "win32") verifyWindowsRuntime(readFileSync(source), target.cpu);
 if (["failNextWindowsJobAssignment", "openWindowsPinWithoutDebug", "interceptNextWindowsJobInput"].some(name => readFileSync(source).includes(Buffer.from(name)))) {
   throw new Error("Refusing to stage a fault-injection addon in a platform package");
