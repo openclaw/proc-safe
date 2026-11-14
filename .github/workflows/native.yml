@@ -152,7 +152,11 @@ jobs:
       - run: pnpm package:smoke
       - name: Installed default-call smoke on Node and Bun
         shell: bash
-        run: node scripts/installed-smoke.mjs "$(node -p 'require("./package.json").version')" --bun --tarballs release-artifacts/*.tgz
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          node scripts/installed-smoke.mjs "$version" --bun --tarballs \
+            "release-artifacts/openclaw-proc-safe-$version.tgz" \
+            "release-artifacts/openclaw-proc-safe-${{ matrix.label }}-$version.tgz"
       - name: Separate Windows fault-injection addon (Node)
         if: runner.os == 'Windows'
         run: node scripts/check-windows-job-fault.mjs
