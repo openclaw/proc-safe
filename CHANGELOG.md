@@ -4,7 +4,7 @@
 
 - Add Linux filesystem-restricted launch: prepare a native helper that enforces caller-supplied paths before target execution, preserving the existing supervisor and explicit inherited descriptors. Requires Landlock ABI 3 or later, fails closed when unavailable, and rejects invalid executable formats without a shell fallback.
 
-- Fix Windows native loading on systems without the Visual C++ redistributable, while retaining the OS-serviced Universal CRT.
+- Fix Windows native loading on systems without the Visual C++ redistributable, while retaining the OS-serviced Universal CRT. Thanks @paulcam206.
 
 ## 0.5.0 - 2026-11-05
 
