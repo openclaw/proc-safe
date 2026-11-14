@@ -21,7 +21,9 @@ function observe({ pid, parentPid, state }) {
   assert.equal(root.owner, "different");
   assert.equal(root.parentPid, 0);
   assert.equal(root.processGroupId, 1);
-  assert.equal(root.identity, undefined);
+  const rootIdentity = readProcessIdentity(1);
+  assert.ok(rootIdentity, "the readable launchd kernel record must retain its identity");
+  assert.deepEqual(root.identity, rootIdentity);
   assert.ok(root.state);
   const selected = listProcesses({ timeoutMs: 5000, pids: [pid, pid] });
   if (state === "gone") {
@@ -52,7 +54,7 @@ function observe({ pid, parentPid, state }) {
   const selectedRoot = listProcesses({ timeoutMs: 5000, includeCommand: true, pids: [1] });
   assert.equal(selectedRoot.length, 1);
   assert.equal(selectedRoot[0].owner, "different");
-  assert.equal(selectedRoot[0].identity, undefined);
+  assert.deepEqual(selectedRoot[0].identity, rootIdentity);
   assert.equal(selectedRoot[0].command, undefined);
   assert.throws(() => listProcesses({ timeoutMs: Number.MIN_VALUE }), error => error.code === "timeout");
   const native = createRequire(import.meta.url)(hostNativeTarget().package);
