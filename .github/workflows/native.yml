@@ -70,7 +70,7 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           rustup target add i686-pc-windows-msvc
-          rustc --target i686-pc-windows-msvc test/fixtures/inspect-child.rs -o target/inspect-child-x86.exe
+          node scripts/build-windows-inspect-fixture.mjs
       - name: Native Node contracts and main/Worker proof
         env:
           PROC_SAFE_NATIVE: require

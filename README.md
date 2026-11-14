@@ -54,6 +54,8 @@ pnpm add @openclaw/proc-safe
 
 Node.js 22 or newer. The matching prebuilt binary arrives as an optional platform package; there
 is nothing to compile. Bun is supported on every platform it ships for.
+Windows x64 and ARM64 bindings use the OS-provided Universal CRT (UCRT) and statically
+linked compiler runtime; no separate Visual C++ redistributable installation is required.
 
 ## Capabilities
 

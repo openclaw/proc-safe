@@ -45,6 +45,18 @@ is divided as a 64-bit integer before conversion to a JavaScript number. Handles
 when an observation fails. GetExitCodeProcess reports retained exited objects; an exit timestamp disambiguates
 the reserved STILL_ACTIVE value from an application that actually exits with code 259. Access denial is never reported as a missing process.
 
+Windows x64 and ARM64 release bindings use dynamic OS-provided UCRT and static
+compiler-specific VCRUNTIME. This avoids an external VC redistributable prerequisite
+while retaining Windows servicing of the UCRT. The producer preserves inherited
+Rust flags, including Cargo's encoded-flags precedence, and applies this policy only
+to MSVC targets; other platforms' linkage is unchanged.
+Before staging or packing, PE machine and import/delay-import checks reject external
+VC runtime dependencies and require OS UCRT linkage. These artifact checks do not
+prove runtime loading: test the exact packed root/platform pair on a separate clean
+Windows runtime environment without Build Tools or a VC redistributable, using Node
+22 and 24, real self identity and inherited-option Workers. Record each architecture
+separately; cross-compilation is not ARM64 runtime proof.
+
 Linux reads procfs stat using the final comm parenthesis and brackets it with samples of
 `CLOCK_REALTIME` and `CLOCK_BOOTTIME`. Intersecting the samples' offset intervals detects
 observed wall-clock changes and bounds sampling uncertainty to one clock tick; a disjoint
