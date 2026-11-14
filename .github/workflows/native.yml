@@ -78,6 +78,7 @@ jobs:
         run: |
           minimum=$(otool -l native/proc-safe-native.darwin-${{ matrix.arch }}.node | awk '/LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX/ { found = 1; next } found && ($1 == "minos" || $1 == "version") { print $2; exit }')
           test "$minimum" = '${{ matrix.macos-minimum }}'
+          codesign --verify --strict native/proc-safe-native.darwin-${{ matrix.arch }}.node
       - name: Darwin-only Rust unit tests
         if: runner.os == 'macOS' && matrix.node == '24.22.1'
         run: cargo test --workspace --locked
@@ -129,6 +130,7 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET=10.12 node scripts/build-native.mjs x86_64-apple-darwin
           minimum=$(otool -l native/proc-safe-native.darwin-x64.node | awk '/LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX/ { found = 1; next } found && ($1 == "minos" || $1 == "version") { print $2; exit }')
           test "$minimum" = '10.12'
+          codesign --verify --strict native/proc-safe-native.darwin-x64.node
           arch -x86_64 "$RUNNER_TEMP/node-${node_version}-darwin-x64/bin/node" scripts/inspect-proof.mjs --rosetta
           arch -x86_64 "$RUNNER_TEMP/node-${node_version}-darwin-x64/bin/node" scripts/check-darwin-seatbelt.mjs
           curl --fail --location "https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-darwin-x64.zip" -o "$RUNNER_TEMP/bun-x64.zip"

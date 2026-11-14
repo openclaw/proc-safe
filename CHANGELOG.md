@@ -14,6 +14,8 @@
 
 - Read macOS protected-process identities from validated kernel records when libproc denies access, allowing ancestry walks through Terminal login processes without treating unknown ancestors as complete. Thanks @Stardust-LV.
 
+- Include code signatures on both macOS native bindings and verify their integrity before packaging.
+
 ## 0.5.0 - 2026-11-05
 
 **Highlights:** Add private stdin for Windows Job children and harden release provenance verification and build downloads.

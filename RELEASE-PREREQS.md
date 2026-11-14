@@ -73,6 +73,10 @@ Native addon deployment targets remain macOS 10.12 for x64 and macOS 11.0 for AR
 and glibc 2.28 for Linux GNU (linked in a manylinux_2_28 container, then checked by symbol version);
 Node.js keeps its own supported operating-system requirements.
 
+Both macOS addon architectures receive ad-hoc code signatures before staging and
+must pass `codesign --verify --strict`. These signatures validate Mach-O code
+integrity; npm registry signatures and protected-tag provenance authenticate the publisher.
+
 To build and verify all release packages on current main without creating a tag or
 publishing, dispatch `release.yml` with the current package `version` and `dry_run=true`.
 Manual runs reject publication and non-main source. The dry run includes all native
