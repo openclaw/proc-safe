@@ -105,6 +105,16 @@ jobs:
         env:
           PROC_SAFE_NATIVE: require
         run: pnpm test:bun --fileParallelism=${{ runner.os != 'Windows' }}
+      - name: Diagnose repeated ARM64 private-input lifecycle proof
+        if: matrix.label == 'win32-arm64-msvc' && matrix.node == '22.23.4'
+        env:
+          PROC_SAFE_NATIVE: require
+        run: |
+          1..20 | ForEach-Object {
+            Write-Output "Private-input attempt $_"
+            bun scripts/windows-job-proof.mjs inputs
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - name: Real systemd cross-user machine bridge on Node and Bun
         if: runner.os == 'Linux'
         run: |
