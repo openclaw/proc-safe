@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Read macOS protected-process identities from validated kernel records when libproc denies access, allowing ancestry walks through Terminal login processes without treating unknown ancestors as complete. Thanks @Stardust-LV.
+
 - Add Linux filesystem-restricted launch: prepare a native helper that enforces caller-supplied paths before target execution, preserving the existing supervisor and explicit inherited descriptors. Requires Landlock ABI 3 or later, fails closed when unavailable, and rejects invalid executable formats without a shell fallback.
 
 - Fix Windows native loading on systems without the Visual C++ redistributable, while retaining the OS-serviced Universal CRT. Thanks @paulcam206.

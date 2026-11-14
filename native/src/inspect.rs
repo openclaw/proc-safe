@@ -155,7 +155,7 @@ mod macos {
             std::ptr::null_mut(),
             &mut required,
         ) {
-            if crate::identity::read_process_identity(pid)?.is_none() {
+            if crate::identity::macos::read_for_command(pid)?.is_none() {
                 return Ok(None);
             }
             return Err(error);
@@ -175,7 +175,7 @@ mod macos {
             &mut size,
         ) {
             // ESRCH alone does not prove that a retained kernel object has disappeared.
-            if crate::identity::read_process_identity(pid)?.is_none() {
+            if crate::identity::macos::read_for_command(pid)?.is_none() {
                 return Ok(None);
             }
             return Err(error);
