@@ -8,6 +8,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isMainThread, parentPort, Worker, workerData } from "node:worker_threads";
 import { setTimeout as delay } from "node:timers/promises";
+import { assertDefaultAncestry } from "./ancestry-proof-assertions.mjs";
 
 const packageName = "@openclaw/proc-safe";
 
@@ -82,12 +83,7 @@ async function probe(version, target) {
   assert.ok(Number.isSafeInteger(identity.startTimeMicros) && identity.startTimeMicros > 0);
   // Intentionally omit options: the first published release failed walking to launchd.
   const ancestry = modules["./identity"].readProcessAncestry(process.pid);
-  assert.ok(ancestry !== null);
-  assert.ok(Array.isArray(ancestry.chain) && ancestry.chain.length > 0);
-  assert.equal(ancestry.chain[0].pid, process.pid);
-  assert.ok(ancestry.chain.every(entry => entry.pid > 1));
-  assert.ok(ancestry.complete === true || ancestry.stoppedBy === "unreadable-parent",
-    "default ancestry must complete or explicitly report an unreadable parent");
+  assertDefaultAncestry(ancestry, process.pid);
   if (process.platform === "darwin") {
     const coalition = modules["./darwin"].readProcessCoalition(process.pid);
     assert.ok(coalition && typeof coalition.id === "bigint" && coalition.id > 0n);
@@ -173,9 +169,10 @@ if (!isMainThread) {
     writeFileSync(env.npm_config_userconfig, "");
     writeFileSync(env.npm_config_globalconfig, "");
     writeFileSync(join(directory, "package.json"), JSON.stringify({ private: true, type: "module" }));
-    // Copy only this standalone script. All package resolution now starts outside the checkout.
+    // Copy the probes. All package resolution now starts outside the checkout.
     const script = join(directory, "installed-smoke.mjs");
     copyFileSync(fileURLToPath(import.meta.url), script);
+    copyFileSync(new URL("./ancestry-proof-assertions.mjs", import.meta.url), join(directory, "ancestry-proof-assertions.mjs"));
     const installArgs = ["install", ...(tarballs.length ? tarballs : [`${packageName}@${version}`]),
       "--registry=https://registry.npmjs.org", "--no-audit", "--no-fund", "--fetch-retries=0", "--fetch-timeout=30000"];
     const pauses = tarballs.length ? [0] : [0, 5000, 10000, 20000, 40000];

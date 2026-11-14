@@ -338,14 +338,14 @@ async function doctorOrderChild() {
 async function doctorOrder(worker, terminate) {
   const dir = mkdtempSync(join(tmpdir(), "proc-safe-doctor-order-"));
   const outer = WindowsJob.create(); // Parent keeps sole ownership throughout.
-  let child, pin, descendant;
+  let child, pin, descendant, output;
   try {
     const finish = join(dir, "finish"), ready = join(dir, "descendant");
     child = outer.spawn({ executable: process.execPath,
       commandLine: [process.execPath, entry, "doctor-order", worker ? "worker" : "main", ready, finish].map(quote).join(" "), stdin: "pipe" });
     pin = PinnedProcess.open(child.pid);
     assert.ok(pin);
-    const output = collect(child);
+    output = collect(child);
     await until(() => { output.poll(); return output.out() === "inner-retained\n"; });
     assert.equal(pin.identity.exited, false);
     assert.ok(outer.processIds().includes(child.pid));
@@ -368,6 +368,11 @@ async function doctorOrder(worker, terminate) {
     await until(() => outer.accounting().activeProcesses === 0);
     const result = await drain(child);
     assert.equal(result.code, terminate ? 39 : 0, result.err.toString());
+  } catch (error) {
+    throw new Error(`Doctor nesting proof failed: ${JSON.stringify({
+      worker, terminate, pid: child?.pid, exitCode: child?.exitCode(),
+      stdout: output?.out(), stderr: output?.err(),
+    })}`, { cause: error });
   } finally {
     // Only the parent's task-owned outer Job is terminated, including on failure.
     try { outer.terminate(40); } finally {
