@@ -150,6 +150,7 @@ if (!isMainThread) {
   assert.equal(message, "passed");
   assert.deepEqual(await exit, [0]);
 } else {
+  const { runNpm } = await import("./npm-cli.mjs");
   const [version, ...args] = process.argv.slice(2);
   assert.match(version ?? "", /^\d+\.\d+\.\d+(?:-[\da-zA-Z.-]+)?$/, "usage: node scripts/installed-smoke.mjs <exact-version> [--bun] [--tarballs <root.tgz> <platform.tgz>]");
   const withBun = args[0] === "--bun";
@@ -183,9 +184,8 @@ if (!isMainThread) {
       try {
         rmSync(join(directory, "node_modules"), { recursive: true, force: true });
         rmSync(join(directory, "package-lock.json"), { force: true });
-        // cmd is needed only for npm.cmd; all arguments are fixed, exact versions or trusted local paths.
-        execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", installArgs,
-          { cwd: directory, env, stdio: "inherit", timeout: 120000, shell: process.platform === "win32" });
+        // Keep installation on the same Node architecture as the package probes.
+        runNpm(installArgs, { cwd: directory, env, stdio: "inherit", timeout: 120000 });
         // npm can succeed while an optional platform tarball is still propagating.
         const installed = createRequire(script);
         assert.equal(installed(`${packageName}/package.json`).version, version);

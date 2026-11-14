@@ -23,3 +23,7 @@ export function resolveNpmCli() {
   }
   return npmCli;
 }
+
+export function runNpm(args, options = {}) {
+  return execFileSync(process.execPath, [resolveNpmCli(), ...args], options);
+}
