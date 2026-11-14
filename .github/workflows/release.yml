@@ -135,7 +135,7 @@ jobs:
           path: release-notes.md
           if-no-files-found: error
   installed-smoke:
-    name: Published install (${{ matrix.os }})
+    name: Published install (${{ matrix.os }}, ${{ matrix.arch }})
     needs: verify-registry
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
@@ -145,8 +145,7 @@ jobs:
         include:
           - os: xcode-27
             arch: arm64
-          # Public command-inspection smoke needs a native Intel kernel, not Rosetta.
-          - os: macos-26-intel
+          - os: xcode-27
             arch: x64
           - os: ubuntu-latest
             arch: x64
@@ -158,12 +157,26 @@ jobs:
             arch: arm64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Prepare Rosetta for x64 consumers
+        if: runner.os == 'macOS' && matrix.arch == 'x64'
+        run: |
+          if ! arch -x86_64 /usr/bin/true; then
+            sudo softwareupdate --install-rosetta --agree-to-license
+          fi
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 24.22.1
+          architecture: ${{ matrix.arch }}
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        if: runner.os != 'macOS' || matrix.arch != 'x64'
         with:
           bun-version: 1.4.4
+      - name: Install x64 Bun for Rosetta consumers
+        if: runner.os == 'macOS' && matrix.arch == 'x64'
+        run: |
+          curl --fail --location "https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-darwin-x64.zip" -o "$RUNNER_TEMP/bun-x64.zip"
+          unzip -q "$RUNNER_TEMP/bun-x64.zip" -d "$RUNNER_TEMP/bun-x64"
+          echo "$RUNNER_TEMP/bun-x64/bun-darwin-x64" >> "$GITHUB_PATH"
       - name: Verify real runner architecture
         run: node -e "if(process.arch !== '${{ matrix.arch }}') throw new Error('wrong runner architecture')"
       - name: Fresh public-registry install and default calls on Node and Bun

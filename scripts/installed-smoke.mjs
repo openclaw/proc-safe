@@ -35,10 +35,12 @@ async function probe(version, target) {
   assert.equal(native.loaded, true);
   assert.equal(native.packageName, target);
   assert.equal(native.packageVersion, version);
+  const translated = process.platform === "darwin" && process.arch === "x64" &&
+    execFileSync("/usr/sbin/sysctl", ["-in", "sysctl.proc_translated"], { encoding: "utf8" }).trim() === "1";
   const expected = {
     "./identity": true,
     "./darwin": process.platform === "darwin",
-    "./inspect": ["darwin", "win32"].includes(process.platform),
+    "./inspect": ["darwin", "win32"].includes(process.platform) && !translated,
     "./windows-job": process.platform === "win32",
     "./windows-token": process.platform === "win32",
     "./reaper": process.platform === "linux",
@@ -91,9 +93,13 @@ async function probe(version, target) {
     assert.ok(coalition && typeof coalition.id === "bigint" && coalition.id > 0n);
   }
   if (["darwin", "win32"].includes(process.platform)) {
-    const command = modules["./inspect"].readProcessCommand(process.pid);
-    assert.ok(command?.executable && command.argv.length > 0);
-    assert.deepEqual(command.environment, {});
+    if (translated) {
+      assert.throws(() => modules["./inspect"].readProcessCommand(process.pid), { code: "unsupported-platform" });
+    } else {
+      const command = modules["./inspect"].readProcessCommand(process.pid);
+      assert.ok(command?.executable && command.argv.length > 0);
+      assert.deepEqual(command.environment, {});
+    }
     const rows = modules["./inspect"].listProcesses({ timeoutMs: 5000 });
     assert.ok(rows.some(row => row.pid === process.pid && row.parentPid === identity.parentPid && row.owner === "same"));
   }
@@ -144,6 +150,7 @@ if (!isMainThread) {
   assert.equal(message, "passed");
   assert.deepEqual(await exit, [0]);
 } else {
+  const { runNpm } = await import("./npm-cli.mjs");
   const [version, ...args] = process.argv.slice(2);
   assert.match(version ?? "", /^\d+\.\d+\.\d+(?:-[\da-zA-Z.-]+)?$/, "usage: node scripts/installed-smoke.mjs <exact-version> [--bun] [--tarballs <root.tgz> <platform.tgz>]");
   const withBun = args[0] === "--bun";
@@ -177,9 +184,8 @@ if (!isMainThread) {
       try {
         rmSync(join(directory, "node_modules"), { recursive: true, force: true });
         rmSync(join(directory, "package-lock.json"), { force: true });
-        // cmd is needed only for npm.cmd; all arguments are fixed, exact versions or trusted local paths.
-        execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", installArgs,
-          { cwd: directory, env, stdio: "inherit", timeout: 120000, shell: process.platform === "win32" });
+        // Keep installation on the same Node architecture as the package probes.
+        runNpm(installArgs, { cwd: directory, env, stdio: "inherit", timeout: 120000 });
         // npm can succeed while an optional platform tarball is still propagating.
         const installed = createRequire(script);
         assert.equal(installed(`${packageName}/package.json`).version, version);

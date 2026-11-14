@@ -237,7 +237,7 @@ and in Workers, under Node 22 and 24 (and Bun where available):
 | OS | Architectures |
 |---|---|
 | macOS | arm64, x64 |
-| Linux (glibc and musl) | x64, arm64 |
+| Linux (glibc 2.28+ and musl) | x64, arm64 |
 | Windows | x64, arm64 |
 | FreeBSD 14.4+ | x64, arm64 |
 
