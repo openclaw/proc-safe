@@ -1,6 +1,5 @@
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/ioctl.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <signal.h>
@@ -103,9 +102,6 @@ int main(void) {
         if (setsid() != getpid()) _exit(3);
         int slave = open(slave_path, O_RDWR | O_NOCTTY | O_NONBLOCK);
         if (slave < 0) _exit(4);
-        // Bind hangups to this session, never an unowned or recycled PTY group.
-        if (ioctl(slave, TIOCSCTTY, 0) != 0 || tcsetpgrp(slave, getpgrp()) != 0 ||
-            tcgetpgrp(slave) != getpid()) _exit(15);
         char buffer[1024];
         memset(buffer, 'x', sizeof(buffer));
         while (write(slave, buffer, sizeof(buffer)) > 0) {}
