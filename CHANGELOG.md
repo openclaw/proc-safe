@@ -2,13 +2,17 @@
 
 ## Unreleased
 
-- Read macOS protected-process identities from validated kernel records when libproc denies access, allowing ancestry walks through Terminal login processes without treating unknown ancestors as complete. Thanks @Stardust-LV.
+## 0.6.0 - 2026-11-13
+
+**Highlights:** Add Linux filesystem-restricted launch and restore native compatibility on older Linux hosts, Windows without the VC redistributable, and macOS Terminal.
 
 - Add Linux filesystem-restricted launch: prepare a native helper that enforces caller-supplied paths before target execution, preserving the existing supervisor and explicit inherited descriptors. Requires Landlock ABI 3 or later, fails closed when unavailable, and rejects invalid executable formats without a shell fallback.
 
+- Linux glibc bindings load on glibc 2.28 and newer, matching Node.js's own Linux requirement; 0.4.2 and 0.5.0 required glibc 2.34 and failed to load on hosts such as Ubuntu 20.04 and RHEL 8. Thanks @guhyun9454.
+
 - Fix Windows native loading on systems without the Visual C++ redistributable, while retaining the OS-serviced Universal CRT. Thanks @paulcam206.
 
-- Linux glibc bindings load on glibc 2.28 and newer, matching Node.js's own Linux requirement; 0.4.2 and 0.5.0 required glibc 2.34 and failed to load on hosts such as Ubuntu 20.04 and RHEL 8. Thanks @guhyun9454.
+- Read macOS protected-process identities from validated kernel records when libproc denies access, allowing ancestry walks through Terminal login processes without treating unknown ancestors as complete. Thanks @Stardust-LV.
 
 ## 0.5.0 - 2026-11-05
 
