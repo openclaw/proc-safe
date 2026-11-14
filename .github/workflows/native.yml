@@ -94,7 +94,7 @@ jobs:
           node scripts/build-windows-inspect-fixture.mjs
       - name: Build temporary hangup tracer
         if: runner.os == 'macOS'
-        run: cc -dynamiclib test/fixtures/trace-hangup.c -o "$RUNNER_TEMP/trace-hangup.dylib"
+        run: cc -dynamiclib -arch arm64 -arch arm64e -arch x86_64 test/fixtures/trace-hangup.c -o "$RUNNER_TEMP/trace-hangup.dylib"
       - name: Native Node contracts and main/Worker proof
         env:
           PROC_SAFE_NATIVE: require
