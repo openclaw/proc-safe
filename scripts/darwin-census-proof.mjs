@@ -116,11 +116,13 @@ if (!isMainThread) {
   try {
     const executable = process.argv[2] ?? join(directory, "census-child");
     if (directory) execFileSync("cc", [fileURLToPath(new URL("../test/fixtures/darwin-census.c", import.meta.url)), "-o", executable]);
-    child = spawn(executable, [], { stdio: ["pipe", "pipe", "inherit"] });
+    // PTY teardown must not send a hangup to the test runner's process group.
+    child = spawn(executable, [], { stdio: ["pipe", "pipe", "inherit"], detached: true });
     closed = once(child, "close");
     const lines = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
     const pid = Number((await lines.next()).value);
     assert.ok(Number.isInteger(pid) && pid > 0);
+    assert.equal(listProcesses({ timeoutMs: 5000, pids: [child.pid] })[0].processGroupId, child.pid);
     // BSD process status stays runnable while this process's thread waits on a pipe.
     await proveBoth({ pid, parentPid: child.pid, state: "running" });
     child.stdin.write("s");
