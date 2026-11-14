@@ -35,10 +35,12 @@ async function probe(version, target) {
   assert.equal(native.loaded, true);
   assert.equal(native.packageName, target);
   assert.equal(native.packageVersion, version);
+  const translated = process.platform === "darwin" && process.arch === "x64" &&
+    execFileSync("/usr/sbin/sysctl", ["-in", "sysctl.proc_translated"], { encoding: "utf8" }).trim() === "1";
   const expected = {
     "./identity": true,
     "./darwin": process.platform === "darwin",
-    "./inspect": ["darwin", "win32"].includes(process.platform),
+    "./inspect": ["darwin", "win32"].includes(process.platform) && !translated,
     "./windows-job": process.platform === "win32",
     "./windows-token": process.platform === "win32",
     "./reaper": process.platform === "linux",
@@ -91,9 +93,13 @@ async function probe(version, target) {
     assert.ok(coalition && typeof coalition.id === "bigint" && coalition.id > 0n);
   }
   if (["darwin", "win32"].includes(process.platform)) {
-    const command = modules["./inspect"].readProcessCommand(process.pid);
-    assert.ok(command?.executable && command.argv.length > 0);
-    assert.deepEqual(command.environment, {});
+    if (translated) {
+      assert.throws(() => modules["./inspect"].readProcessCommand(process.pid), { code: "unsupported-platform" });
+    } else {
+      const command = modules["./inspect"].readProcessCommand(process.pid);
+      assert.ok(command?.executable && command.argv.length > 0);
+      assert.deepEqual(command.environment, {});
+    }
     const rows = modules["./inspect"].listProcesses({ timeoutMs: 5000 });
     assert.ok(rows.some(row => row.pid === process.pid && row.parentPid === identity.parentPid && row.owner === "same"));
   }

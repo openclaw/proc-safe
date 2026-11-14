@@ -6,7 +6,7 @@
 
 - Fix Windows native loading on systems without the Visual C++ redistributable, while retaining the OS-serviced Universal CRT. Thanks @paulcam206.
 
-- Linux glibc bindings load on glibc 2.28 and newer, matching Node.js's own Linux requirement; 0.4.2 and 0.5.0 required glibc 2.34 and failed to load on hosts such as Ubuntu 20.04 and RHEL 8.
+- Linux glibc bindings load on glibc 2.28 and newer, matching Node.js's own Linux requirement; 0.4.2 and 0.5.0 required glibc 2.34 and failed to load on hosts such as Ubuntu 20.04 and RHEL 8. Thanks @guhyun9454.
 
 ## 0.5.0 - 2026-11-05
 

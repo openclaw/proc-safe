@@ -12,7 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         node: ["22.23.4", "24.22.1"]
-        label: [linux-x64-gnu, linux-arm64-gnu, darwin-x64, darwin-arm64, win32-x64-msvc, win32-arm64-msvc]
+        label: [linux-x64-gnu, linux-arm64-gnu, darwin-arm64, win32-x64-msvc, win32-arm64-msvc]
         include:
           - node: "22.23.4"
             node-major: 22
@@ -26,11 +26,6 @@ jobs:
             os: ubuntu-24.04-arm
             arch: arm64
             glibc-floor: '2.28'
-          - label: darwin-x64
-            # Native Intel command inspection is intentionally unsupported under Rosetta.
-            os: macos-26-intel
-            arch: x64
-            macos-minimum: '10.12'
           - label: darwin-arm64
             os: xcode-27
             arch: arm64
@@ -75,8 +70,9 @@ jobs:
       - name: Verify native glibc floor
         if: runner.os == 'Linux'
         run: |
-          required=$(objdump -T native/proc-safe-native.linux-${{ matrix.arch }}-gnu.node | grep -o 'GLIBC_[0-9][0-9.]*' | cut -d_ -f2 | sort -uV | tail -n 1)
-          test "$(printf '%s\n%s\n' "$required" '${{ matrix.glibc-floor }}' | sort -V | tail -n 1)" = '${{ matrix.glibc-floor }}'
+          node scripts/check-glibc-floor.mjs '${{ matrix.glibc-floor }}' \
+            native/proc-safe-native.linux-${{ matrix.arch }}-gnu.node \
+            native/proc-safe-filesystem-launch.linux-${{ matrix.arch }}-gnu
       - name: Verify native macOS minimum
         if: runner.os == 'macOS'
         run: |
@@ -131,13 +127,16 @@ jobs:
           tar -xzf "$RUNNER_TEMP/node-x64.tar.gz" -C "$RUNNER_TEMP"
           rustup target add x86_64-apple-darwin
           MACOSX_DEPLOYMENT_TARGET=10.12 node scripts/build-native.mjs x86_64-apple-darwin
+          minimum=$(otool -l native/proc-safe-native.darwin-x64.node | awk '/LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX/ { found = 1; next } found && ($1 == "minos" || $1 == "version") { print $2; exit }')
+          test "$minimum" = '10.12'
           arch -x86_64 "$RUNNER_TEMP/node-${node_version}-darwin-x64/bin/node" scripts/inspect-proof.mjs --rosetta
           arch -x86_64 "$RUNNER_TEMP/node-${node_version}-darwin-x64/bin/node" scripts/check-darwin-seatbelt.mjs
           curl --fail --location "https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-darwin-x64.zip" -o "$RUNNER_TEMP/bun-x64.zip"
           unzip -q "$RUNNER_TEMP/bun-x64.zip" -d "$RUNNER_TEMP/bun-x64"
           arch -x86_64 "$RUNNER_TEMP/bun-x64/bun-darwin-x64/bun" scripts/check-darwin-seatbelt.mjs
-          # The Intel runtime lane owns the published x64 artifact.
-          rm native/proc-safe-native.darwin-x64.node
+          arch -x86_64 "$RUNNER_TEMP/node-${node_version}-darwin-x64/bin/node" scripts/runtime-proof.mjs
+          arch -x86_64 "$RUNNER_TEMP/node-${node_version}-darwin-x64/bin/node" scripts/check-release-packages.mjs --allow-host-only --npm-only
+          PATH="$RUNNER_TEMP/bun-x64/bun-darwin-x64:$PATH" arch -x86_64 "$RUNNER_TEMP/node-${node_version}-darwin-x64/bin/node" scripts/installed-smoke.mjs "$(node -p 'require("./package.json").version')" --bun --tarballs release-artifacts/*.tgz
       - name: Real Windows permission denial
         if: runner.os == 'Windows'
         run: node scripts/check-windows-denial.mjs
