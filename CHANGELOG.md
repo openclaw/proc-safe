@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Linux:** `inspectChildWaitState` and `reapChild` now fall back when the kernel
+  rejects `__WALL` (Linux < 4.7) instead of failing with `EINVAL`. Clone children
+  whose exit signal is 0 remain unobservable on those kernels and raise
+  `incomplete` instead of being reported as absent.
+
 ## 0.6.0 - 2026-11-13
 
 **Highlights:** Add Linux filesystem-restricted launch and restore native compatibility on older Linux hosts, Windows without the VC redistributable, and macOS Terminal.
