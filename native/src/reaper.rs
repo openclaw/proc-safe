@@ -31,10 +31,15 @@ fn validate_pid(pid: i32) -> Result<()> {
 
 // Linux < 4.7 rejects __WALL in waitid options with EINVAL, so observe() retries
 // without it. Clone children whose exit signal is 0 are then invisible to
-// waitid: ECHILD for a PID that is still our child would be an incomplete
-// observation, not a proven absence.
-fn stat_parent_pid(pid: i32) -> Option<i32> {
-    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+// waitid: ECHILD is only a proven absence when procfs confirms that no child
+// is left; a procfs lookup that cannot answer is an incomplete observation.
+enum ParentState {
+    Child,
+    NotChild,
+    Unknown,
+}
+
+fn parse_parent_pid(stat: &str) -> Option<i32> {
     // Field 4 is the parent PID; comm (field 2) may contain spaces and parens.
     let (_, rest) = stat.rsplit_once(')')?;
     let mut fields = rest.split_whitespace();
@@ -42,22 +47,44 @@ fn stat_parent_pid(pid: i32) -> Option<i32> {
     fields.next()?.parse::<i32>().ok()
 }
 
-fn is_live_child(pid: i32) -> bool {
-    stat_parent_pid(pid) == Some(unsafe { libc::getpid() })
+fn parent_state(pid: i32) -> ParentState {
+    match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+        Ok(stat) => match parse_parent_pid(&stat) {
+            Some(ppid) if ppid == unsafe { libc::getpid() } => ParentState::Child,
+            Some(_) => ParentState::NotChild,
+            None => ParentState::Unknown,
+        },
+        // A vanished process is no longer our child; anything else keeps the
+        // observation inconclusive (e.g. hidepid denies the read).
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => ParentState::NotChild,
+        Err(_) => ParentState::Unknown,
+    }
 }
 
-fn live_children_exist() -> bool {
+fn live_children_state() -> ParentState {
     let self_pid = unsafe { libc::getpid() };
     let Ok(entries) = std::fs::read_dir("/proc") else {
-        return false;
+        // The scan itself failed; keep the aggregate observation inconclusive.
+        return ParentState::Unknown;
     };
-    entries.flatten().any(|entry| {
-        entry
+    for entry in entries.flatten() {
+        let Some(pid) = entry
             .file_name()
             .to_str()
             .and_then(|name| name.parse::<i32>().ok())
-            .is_some_and(|pid| pid != self_pid && stat_parent_pid(pid) == Some(self_pid))
-    })
+        else {
+            continue;
+        };
+        if pid == self_pid {
+            continue;
+        }
+        // Entries that cannot be classified (e.g. hidepid) are not evidence of
+        // a child, so they do not turn an empty child list into uncertainty.
+        if matches!(parent_state(pid), ParentState::Child) {
+            return ParentState::Child;
+        }
+    }
+    ParentState::NotChild
 }
 
 fn observe(pid: Option<i32>) -> Result<Observation> {
@@ -86,17 +113,20 @@ fn observe(pid: Option<i32>) -> Result<Observation> {
     if result != 0 {
         let error = std::io::Error::last_os_error();
         if error.raw_os_error() == Some(libc::ECHILD) {
-            // Without __WALL a live clone child (exit signal 0) is invisible, so
-            // ECHILD would be an incomplete observation, not a proven absence.
-            let invisible_child = match pid {
-                Some(pid) => is_live_child(pid),
-                None => live_children_exist(),
-            };
-            if fallback && invisible_child {
-                return Err(failure(
-                    "incomplete",
-                    "cannot observe clone children without __WALL on this kernel",
-                ));
+            if fallback {
+                // Without __WALL a clone child (exit signal 0) is invisible, so
+                // ECHILD is only a proven absence when procfs confirms that no
+                // child is left; a lookup that cannot answer is incomplete.
+                let state = match pid {
+                    Some(pid) => parent_state(pid),
+                    None => live_children_state(),
+                };
+                if !matches!(state, ParentState::NotChild) {
+                    return Err(failure(
+                        "incomplete",
+                        "cannot observe clone children without __WALL on this kernel",
+                    ));
+                }
             }
             return Ok(Observation::None);
         }
@@ -204,13 +234,17 @@ pub fn reap_child(pid: i32) -> Result<Option<ChildExit>> {
     if result < 0 {
         let error = std::io::Error::last_os_error();
         if error.raw_os_error() == Some(libc::ECHILD) {
-            // A clone child (exit signal 0) is not reapable without __WALL; that
-            // is an unsupported observation, not a foreign PID.
+            // With the fallback active, ECHILD may mean an invisible clone
+            // child; procfs decides whether the PID is still our child. A
+            // lookup that cannot answer stays inconclusive.
             return Err(if fallback {
-                failure(
-                    "incomplete",
-                    "cannot reap clone children without __WALL on this kernel",
-                )
+                match parent_state(pid) {
+                    ParentState::NotChild => failure("operation-failed", "not-a-child"),
+                    ParentState::Child | ParentState::Unknown => failure(
+                        "incomplete",
+                        "cannot reap clone children without __WALL on this kernel",
+                    ),
+                }
             } else {
                 failure("operation-failed", "not-a-child")
             });
