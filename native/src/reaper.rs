@@ -34,18 +34,23 @@ fn observe(pid: Option<i32>) -> Result<Observation> {
         validate_pid(pid)?;
     }
     let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
-    let result = unsafe {
-        libc::waitid(
-            if pid.is_some() {
-                libc::P_PID
-            } else {
-                libc::P_ALL
-            },
-            pid.unwrap_or(0) as libc::id_t,
-            &mut info,
-            libc::WEXITED | libc::WNOWAIT | libc::WNOHANG | libc::__WALL,
-        )
+    let which = if pid.is_some() {
+        libc::P_PID
+    } else {
+        libc::P_ALL
     };
+    let id = pid.unwrap_or(0) as libc::id_t;
+    let mut options = libc::WEXITED | libc::WNOWAIT | libc::WNOHANG | libc::__WALL;
+    let mut result = unsafe { libc::waitid(which, id, &mut info, options) };
+    if result != 0 && std::io::Error::last_os_error().raw_os_error() == Some(libc::EINVAL) {
+        // Linux < 4.7 rejects __WALL in waitid options with EINVAL (the flag is
+        // only accepted for clone children from 4.7 on). Retry without it so the
+        // strict cleanup path stays usable on those kernels. The fallback
+        // observes direct children only, which covers spawned processes; clone
+        // children (threads) are not reached.
+        options &= !libc::__WALL;
+        result = unsafe { libc::waitid(which, id, &mut info, options) };
+    }
     if result != 0 {
         let error = std::io::Error::last_os_error();
         return if error.raw_os_error() == Some(libc::ECHILD) {
@@ -143,7 +148,11 @@ pub fn inspect_child_wait_state(pid: Option<i32>) -> Result<ChildWaitState> {
 pub fn reap_child(pid: i32) -> Result<Option<ChildExit>> {
     validate_pid(pid)?;
     let mut status = 0_i32;
-    let result = unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG | libc::__WALL) };
+    let mut result = unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG | libc::__WALL) };
+    if result < 0 && std::io::Error::last_os_error().raw_os_error() == Some(libc::EINVAL) {
+        // Same kernel limitation as in observe(): retry without __WALL.
+        result = unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) };
+    }
     if result == 0 {
         return Ok(None);
     }
