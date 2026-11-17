@@ -24,8 +24,14 @@ are not established by this API's importability or `isSupported()` result.
 
 `inspectChildWaitState(pid?)` never reaps. It uses `waitid` with `WNOWAIT`, `WNOHANG`,
 `WEXITED`, and `__WALL`, including non-SIGCHLD children and children created by another
-thread in the process. With a positive PID it observes only that PID; without a PID
-it observes all children. Its frozen result is:
+thread in the process. With a positive PID it observes only that PID; without a PID it
+observes all children. Kernels before Linux 4.7 reject `__WALL` in `waitid` options, so
+the reaper contract requires **Linux 4.7 or newer**: on older kernels
+`inspectChildWaitState()` raises `unsupported-platform` instead of degrading to direct
+children, `reapChild()` reports the same error when the kernel rejects its mask,
+`childObservationSupported()` returns `false`, and there is no silent fallback.
+
+Its frozen result is:
 
 - `{ kind: 'none' }`: `ECHILD`. With a PID, it is not our unreaped child; without a
   PID, no children remain. This does not mean that a supplied PID does not exist.

@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { expect, test } from "vitest";
-import { becomeChildSubreaper, inspectChildWaitState, isChildSubreaper, reapChild } from "../src/reaper.js";
+import { becomeChildSubreaper, childObservationSupported, inspectChildWaitState, isChildSubreaper, reapChild } from "../src/reaper.js";
 
 test.each([0, -1, 1.5, NaN, Infinity, 0x1_0000_0000])("reaper rejects invalid PID %s", pid => {
   for (const call of [inspectChildWaitState, reapChild]) {
@@ -21,6 +21,7 @@ test("reaper imports lazily and respects disabled native loading", () => {
     process.dlopen = () => { throw new Error('native loading disabled'); };
     const r = await import('./dist/reaper.js');
     assert.equal(r.isSupported(), false);
+    assert.equal(r.childObservationSupported(), false);
     const code = process.platform === 'linux' ? 'helper-unavailable' : 'unsupported-platform';
     for (const call of [() => r.becomeChildSubreaper(), () => r.isChildSubreaper(),
       () => r.inspectChildWaitState(), () => r.inspectChildWaitState(1), () => r.reapChild(1)]) {
@@ -45,3 +46,7 @@ test.runIf(process.platform === "linux" && process.env.PROC_SAFE_NATIVE === "req
       ["scripts/reaper-proof.mjs"], { encoding: "utf8", timeout: 10000 });
     expect(JSON.parse(result)).toEqual({ platform: "linux", arch: process.arch, contexts: 2, scenarios: 10 });
   });
+
+test.runIf(process.platform === "linux")("reaper reports the kernel wait capability", () => {
+  expect(childObservationSupported()).toBe(true);
+});

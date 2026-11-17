@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Linux:** declare the reaper kernel requirement. `inspectChildWaitState` and
+  `reapChild` now raise `unsupported-platform` on kernels that reject `__WALL` in
+  `waitid` options (Linux < 4.7), and `childObservationSupported()` reports the
+  capability instead of silently degrading to direct children.
+
 ## 0.6.0 - 2026-11-13
 
 **Highlights:** Add Linux filesystem-restricted launch and restore native compatibility on older Linux hosts, Windows without the VC redistributable, and macOS Terminal.

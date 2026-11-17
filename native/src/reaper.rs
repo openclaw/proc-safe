@@ -29,7 +29,39 @@ fn validate_pid(pid: i32) -> Result<()> {
     Ok(())
 }
 
+static WALL_WAITID_SUPPORTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
+const REAPER_KERNEL_REQUIREMENT: &str =
+    "child observation requires Linux 4.7 or newer (waitid __WALL)";
+
+// Linux < 4.7 rejects __WALL in waitid options with EINVAL. The reaper contract
+// requires observing non-SIGCHLD children, so those kernels are unsupported
+// rather than silently degrading to direct children only.
+fn wall_waitid_supported() -> bool {
+    *WALL_WAITID_SUPPORTED.get_or_init(|| {
+        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        let result = unsafe {
+            libc::waitid(
+                libc::P_ALL,
+                0,
+                &mut info,
+                libc::WEXITED | libc::WNOWAIT | libc::WNOHANG | libc::__WALL,
+            )
+        };
+        // A missing child (ECHILD) means the mask itself was accepted.
+        result == 0 || std::io::Error::last_os_error().raw_os_error() != Some(libc::EINVAL)
+    })
+}
+
+#[napi]
+pub fn child_observation_supported() -> bool {
+    wall_waitid_supported()
+}
+
 fn observe(pid: Option<i32>) -> Result<Observation> {
+    if !wall_waitid_supported() {
+        return Err(failure("unsupported-platform", REAPER_KERNEL_REQUIREMENT));
+    }
     if let Some(pid) = pid {
         validate_pid(pid)?;
     }
@@ -144,6 +176,9 @@ pub fn reap_child(pid: i32) -> Result<Option<ChildExit>> {
     validate_pid(pid)?;
     let mut status = 0_i32;
     let result = unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG | libc::__WALL) };
+    if result < 0 && std::io::Error::last_os_error().raw_os_error() == Some(libc::EINVAL) {
+        return Err(failure("unsupported-platform", REAPER_KERNEL_REQUIREMENT));
+    }
     if result == 0 {
         return Ok(None);
     }
