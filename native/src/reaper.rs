@@ -39,16 +39,20 @@ enum ParentState {
     Unknown,
 }
 
-fn parse_parent_pid(stat: &str) -> Option<i32> {
-    // Field 4 is the parent PID; comm (field 2) may contain spaces and parens.
-    let (_, rest) = stat.rsplit_once(')')?;
-    let mut fields = rest.split_whitespace();
+fn parse_parent_pid(stat: &[u8]) -> Option<i32> {
+    // Field 4 is the parent PID; comm (field 2) may contain spaces, parens and
+    // non-UTF-8 bytes, so the record is parsed as bytes.
+    let close = stat.iter().rposition(|byte| *byte == b')')?;
+    let rest = &stat[close + 1..];
+    let mut fields = rest
+        .split(|byte| byte.is_ascii_whitespace())
+        .filter(|field| !field.is_empty());
     let _state = fields.next()?;
-    fields.next()?.parse::<i32>().ok()
+    std::str::from_utf8(fields.next()?).ok()?.parse::<i32>().ok()
 }
 
 fn parent_state(pid: i32) -> ParentState {
-    match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+    match std::fs::read(format!("/proc/{pid}/stat")) {
         Ok(stat) => match parse_parent_pid(&stat) {
             Some(ppid) if ppid == unsafe { libc::getpid() } => ParentState::Child,
             Some(_) => ParentState::NotChild,
@@ -64,10 +68,17 @@ fn parent_state(pid: i32) -> ParentState {
 fn live_children_state() -> ParentState {
     let self_pid = unsafe { libc::getpid() };
     let Ok(entries) = std::fs::read_dir("/proc") else {
-        // The scan itself failed; keep the aggregate observation inconclusive.
         return ParentState::Unknown;
     };
-    for entry in entries.flatten() {
+    let mut unknown = false;
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(_) => {
+                unknown = true;
+                continue;
+            }
+        };
         let Some(pid) = entry
             .file_name()
             .to_str()
@@ -78,13 +89,17 @@ fn live_children_state() -> ParentState {
         if pid == self_pid {
             continue;
         }
-        // Entries that cannot be classified (e.g. hidepid) are not evidence of
-        // a child, so they do not turn an empty child list into uncertainty.
-        if matches!(parent_state(pid), ParentState::Child) {
-            return ParentState::Child;
+        match parent_state(pid) {
+            ParentState::Child => return ParentState::Child,
+            ParentState::Unknown => unknown = true,
+            ParentState::NotChild => {}
         }
     }
-    ParentState::NotChild
+    if unknown {
+        ParentState::Unknown
+    } else {
+        ParentState::NotChild
+    }
 }
 
 fn observe(pid: Option<i32>) -> Result<Observation> {

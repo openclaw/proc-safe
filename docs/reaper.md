@@ -33,6 +33,12 @@ it observes all children. Its frozen result is:
   This includes children that are stopped or otherwise not executing.
 - `{ kind: 'exited', pid }`: an exited child whose status is still retained.
 
+On kernels that reject `__WALL` in `waitid` options (Linux < 4.7), inspection falls back
+to direct children only. Clone children whose exit signal is 0 are then invisible, so
+`inspectChildWaitState` raises a typed `incomplete` error instead of reporting
+`{ kind: 'none' }`; a `/proc` lookup that cannot answer is likewise `incomplete`.
+`reapChild` keeps working on those kernels because `waitpid` accepts `__WALL` there.
+
 An inspection is an observation, not a retained handle. Keep ownership coordinated:
 another thread or library can otherwise reap between inspection and a following
 signal or reap. In particular, **never pass a libuv-owned child to `reapChild`**.

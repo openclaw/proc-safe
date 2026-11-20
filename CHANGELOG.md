@@ -2,10 +2,11 @@
 
 ## Unreleased
 
-- **Linux:** `inspectChildWaitState` and `reapChild` now fall back when the kernel
-  rejects `__WALL` (Linux < 4.7) instead of failing with `EINVAL`. Clone children
-  whose exit signal is 0 remain unobservable on those kernels and raise
-  `incomplete` instead of being reported as absent.
+- **Linux:** `inspectChildWaitState` now falls back to direct-child observation when
+  the kernel rejects `__WALL` in `waitid` options (Linux < 4.7) instead of failing
+  with `EINVAL`. Clone children whose exit signal is 0 stay invisible in that mode and
+  raise `incomplete` instead of being reported as absent; `reapChild` is unaffected
+  because `waitpid` accepts `__WALL` on those kernels.
 
 ## 0.6.0 - 2026-11-13
 
