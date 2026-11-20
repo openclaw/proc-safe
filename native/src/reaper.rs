@@ -185,6 +185,15 @@ fn observe(pid: Option<i32>) -> Result<Observation> {
     }
     let observed = unsafe { info.si_pid() };
     if observed == 0 {
+        // Without __WALL an exited clone child (exit signal 0) is invisible to
+        // an aggregate wait, so a successful "no exit status" aggregate result
+        // cannot prove completeness while ordinary children keep running.
+        if fallback && pid.is_none() {
+            return Err(failure(
+                "incomplete",
+                "cannot observe clone children without __WALL on this kernel",
+            ));
+        }
         return Ok(Observation::Running);
     }
     if observed < 0 || pid.is_some_and(|pid| pid != observed) {

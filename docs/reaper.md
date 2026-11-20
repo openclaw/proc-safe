@@ -36,8 +36,10 @@ it observes all children. Its frozen result is:
 On kernels that reject `__WALL` in `waitid` options (Linux < 4.7), inspection falls back
 to direct children only. Clone children whose exit signal is 0 are then invisible, so
 `inspectChildWaitState` raises a typed `incomplete` error instead of reporting
-`{ kind: 'none' }`; a `/proc` lookup that cannot answer is likewise `incomplete`.
-`reapChild` keeps working on those kernels because `waitpid` accepts `__WALL` there.
+`{ kind: 'none' }`, and an aggregate inspection reports `incomplete` instead of
+`{ kind: 'running' }` while ordinary children are alive. A `/proc` lookup that cannot
+answer is likewise `incomplete`. `reapChild` keeps working on those kernels because
+`waitpid` accepts `__WALL` there.
 
 An inspection is an observation, not a retained handle. Keep ownership coordinated:
 another thread or library can otherwise reap between inspection and a following
