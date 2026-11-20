@@ -52,32 +52,31 @@ fn parse_parent_pid(stat: &[u8]) -> Option<i32> {
 }
 
 fn procfs_available() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| std::fs::metadata("/proc/self/stat").is_ok())
+    // Read per observation: /proc can be unmounted or remounted after startup.
+    std::fs::metadata("/proc/self/stat").is_ok()
 }
 
 // With hidepid=1/2 a child that clears PR_SET_DUMPABLE disappears from procfs
 // entirely, so ENOENT no longer proves absence. Unknown mounts are treated as
 // restricted to stay conservative.
 fn procfs_hides_children() -> bool {
-    static HIDES: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *HIDES.get_or_init(|| {
-        let Ok(mounts) = std::fs::read_to_string("/proc/mounts") else {
-            return true;
-        };
-        mounts.lines().any(|line| {
-            let mut fields = line.split_whitespace();
-            let _source = fields.next();
-            let target = fields.next();
-            let _fstype = fields.next();
-            let options = fields.next();
-            target == Some("/proc")
-                && options.is_some_and(|options| {
-                    options
-                        .split(',')
-                        .any(|option| option == "hidepid=1" || option == "hidepid=2")
-                })
-        })
+    // hidepid can change via remount while this process lives, so the mount
+    // options are read for every observation instead of being cached.
+    let Ok(mounts) = std::fs::read_to_string("/proc/mounts") else {
+        return true;
+    };
+    mounts.lines().any(|line| {
+        let mut fields = line.split_whitespace();
+        let _source = fields.next();
+        let target = fields.next();
+        let _fstype = fields.next();
+        let options = fields.next();
+        target == Some("/proc")
+            && options.is_some_and(|options| {
+                options
+                    .split(',')
+                    .any(|option| option == "hidepid=1" || option == "hidepid=2")
+            })
     })
 }
 
