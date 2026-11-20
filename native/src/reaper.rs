@@ -51,6 +51,10 @@ fn parse_parent_pid(stat: &[u8]) -> Option<i32> {
     std::str::from_utf8(fields.next()?).ok()?.parse::<i32>().ok()
 }
 
+fn procfs_available() -> bool {
+    std::fs::metadata("/proc/self/stat").is_ok()
+}
+
 fn parent_state(pid: i32) -> ParentState {
     match std::fs::read(format!("/proc/{pid}/stat")) {
         Ok(stat) => match parse_parent_pid(&stat) {
@@ -58,9 +62,16 @@ fn parent_state(pid: i32) -> ParentState {
             Some(_) => ParentState::NotChild,
             None => ParentState::Unknown,
         },
-        // A vanished process is no longer our child; anything else keeps the
-        // observation inconclusive (e.g. hidepid denies the read).
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => ParentState::NotChild,
+        // ENOENT only proves that the process is gone when procfs itself is
+        // mounted and readable. In a chroot or mount namespace without /proc it
+        // proves nothing, so the observation stays inconclusive.
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            if procfs_available() {
+                ParentState::NotChild
+            } else {
+                ParentState::Unknown
+            }
+        }
         Err(_) => ParentState::Unknown,
     }
 }
