@@ -187,7 +187,9 @@ const state = inspectChildWaitState(adoptedPid);   // never reaps
 if (state.kind === "exited") reapChild(adoptedPid);
 ```
 
-There is deliberately no "reap any child": libuv owns the exit status of the children Node spawned.
+Strict child observation requires Linux 4.7 or newer. `childObservationSupported()`
+checks the required wait capability; unsupported kernels report `unsupported-platform`
+instead of a generic wait error. There is deliberately no "reap any child": libuv owns the exit status of the children Node spawned.
 Real-time signal exits report `signalNumber` even when Node has no name for the signal.
 [Child reaping](docs/reaper.md).
 

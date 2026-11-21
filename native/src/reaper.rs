@@ -29,6 +29,38 @@ fn validate_pid(pid: i32) -> Result<()> {
     Ok(())
 }
 
+const REAPER_KERNEL_REQUIREMENT: &str =
+    "child observation requires Linux 4.7 or newer (waitid __WALL)";
+
+fn wait_failure(error: std::io::Error) -> napi::Error {
+    if error.raw_os_error() == Some(libc::EINVAL) {
+        failure("unsupported-platform", REAPER_KERNEL_REQUIREMENT)
+    } else {
+        io(error)
+    }
+}
+
+#[napi]
+pub fn child_observation_supported() -> Result<bool> {
+    let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+    let result = unsafe {
+        libc::waitid(
+            libc::P_ALL,
+            0,
+            &mut info,
+            libc::WEXITED | libc::WNOWAIT | libc::WNOHANG | libc::__WALL,
+        )
+    };
+    if result == 0 {
+        return Ok(true);
+    }
+    match std::io::Error::last_os_error().raw_os_error() {
+        Some(libc::ECHILD) => Ok(true),
+        Some(libc::EINVAL) => Ok(false),
+        _ => Err(io(std::io::Error::last_os_error())),
+    }
+}
+
 fn observe(pid: Option<i32>) -> Result<Observation> {
     if let Some(pid) = pid {
         validate_pid(pid)?;
@@ -51,7 +83,7 @@ fn observe(pid: Option<i32>) -> Result<Observation> {
         return if error.raw_os_error() == Some(libc::ECHILD) {
             Ok(Observation::None)
         } else {
-            Err(io(error))
+            Err(wait_failure(error))
         };
     }
     let observed = unsafe { info.si_pid() };
@@ -152,7 +184,7 @@ pub fn reap_child(pid: i32) -> Result<Option<ChildExit>> {
         return Err(if error.raw_os_error() == Some(libc::ECHILD) {
             failure("operation-failed", "not-a-child")
         } else {
-            io(error)
+            wait_failure(error)
         });
     }
     if result != pid {

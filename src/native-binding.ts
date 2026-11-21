@@ -52,6 +52,7 @@ export interface NativeBinding {
   isChildSubreaper?(): boolean;
   inspectChildWaitState?(pid?: number): ChildWaitState;
   reapChild?(pid: number): ChildExit | null;
+  childObservationSupported?(): boolean;
   systemdSupported?(): boolean;
   connectSystemd?(mode: string, address: string, timeoutMs: number): Promise<NativeSystemdBus>;
   inspectSupported?(): boolean;
