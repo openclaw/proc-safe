@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Report unsupported Linux child-observation wait masks with `unsupported-platform` instead of a generic error, document the Linux 4.7 requirement, and expose `childObservationSupported()` for capability checks. Thanks @rainman74.
+
 ## 0.6.0 - 2026-11-13
 
 **Highlights:** Add Linux filesystem-restricted launch and restore native compatibility on older Linux hosts, Windows without the VC redistributable, and macOS Terminal.

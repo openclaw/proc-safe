@@ -57,6 +57,13 @@ export function reapChild(pid: number): ChildExit | null {
   } catch (error) { throw fromNativeError(error); }
 }
 
+/** True when the kernel supports the waitid mask the reaper contract requires. */
+export function childObservationSupported(): boolean {
+  if (process.platform !== "linux") return false;
+  try { return getNativeBinding()?.childObservationSupported?.() === true; }
+  catch { return false; }
+}
+
 export function isSupported(): boolean {
   try { binding(); return true; }
   catch { return false; }
