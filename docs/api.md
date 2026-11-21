@@ -13,7 +13,7 @@ status types for optional, path-free native health checks.
 See [systemd connections](systemd.md) for the Linux `./systemd` subpath, typed
 messages, connection ownership, and deadline and authentication contracts.
 
-See [Windows jobs](windows-job.md) for `@openclaw/proc-safe/windows-job`:
+See [Windows jobs](windows-job.md) for `@openclaw/proc-safe/windows-job` (including opt-in breakaway spawning with inherited stdio):
 `WindowsJob`, `WindowsJobChild`, `PinnedProcess`, `WindowsJobSpawnOptions`,
 `isCurrentProcessInJob`, `retainCurrentProcessJobUntilExit`,
 `bindCurrentProcessLifetimeTo`, and `isSupported`.

@@ -13,4 +13,9 @@ for (const target of nativeTargets) {
     // GitHub artifact transport does not retain executable modes.
     chmodSync(destination, 0o755);
   }
+  if (target.os === "win32") {
+    const launcher = new URL(`../artifacts/proc-safe-spawn.${target.label}.exe`, import.meta.url);
+    if (statSync(launcher).size === 0) throw new Error(`${target.label} launcher is empty`);
+    copyFileSync(launcher, new URL("proc-safe-spawn.exe", nativePackageDirectory(target)));
+  }
 }

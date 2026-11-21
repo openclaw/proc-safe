@@ -13,3 +13,5 @@ artifacts/
 *.tgz
 *.tsbuildinfo
 .DS_Store
+native/*.exe
+packages/*/*.exe

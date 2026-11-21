@@ -36,7 +36,7 @@ export interface NativePinnedProcess {
   readonly identity: ProcessIdentity;
   readonly imagePath: string;
   readonly access: "observe" | "lifetime-owner" | "job-member";
-  bindLifetime(): void;
+  bindLifetime(allowBreakaway?: boolean): void;
   close(): void;
 }
 
@@ -72,7 +72,7 @@ export interface NativeBinding {
     identity?: ProcessIdentity;
     command?: NonNullable<ReturnType<NonNullable<NativeBinding["readProcessCommand"]>>>;
   }[];
-  createWindowsJob?(name: string | undefined, killOnJobClose: boolean): NativeJob;
+  createWindowsJob?(name: string | undefined, killOnJobClose: boolean, allowBreakaway?: boolean): NativeJob;
   openWindowsJob?(name: string): NativeJob | null;
   openPinnedProcess?(pid: number, imagePath: string | undefined, startTimeMicros: number | undefined, access: string): NativePinnedProcess | null;
   isCurrentProcessInJob?(): boolean;
