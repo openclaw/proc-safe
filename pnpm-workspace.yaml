@@ -14,3 +14,12 @@ minimumReleaseAgeExclude:
   - '@napi-rs/cli@3.10.8'
   - '@types/node@26.6.5'
   - 'vite@8.3.4'
+
+overrides:
+  glob@>=9.0.0 <=14.0.1: ^14.0.2
+  ip-address@<=10.7.3: ^10.7.4
+  minimatch@>=7.0.0 <11.0.1: ^11.0.1
+
+patchedDependencies:
+  # Bun's IPC channel lacks unref(); remove when Vitest guards the optional method.
+  vitest@5.1.1: patches/vitest@5.1.1.patch

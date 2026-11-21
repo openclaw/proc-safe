@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- Add opt-in Windows Job breakaway spawning with inherited stdio and JSON IPC. Ordinary children stay contained by default.
+
+- Report unsupported Linux child-observation wait masks with `unsupported-platform` instead of a generic error, document the Linux 4.7 requirement, and expose `childObservationSupported()` for capability checks. Thanks @rainman74.
+
+## 0.6.0 - 2026-11-13
+
+**Highlights:** Add Linux filesystem-restricted launch and restore native compatibility on older Linux hosts, Windows without the VC redistributable, and macOS Terminal.
+
+- Add Linux filesystem-restricted launch: prepare a native helper that enforces caller-supplied paths before target execution, preserving the existing supervisor and explicit inherited descriptors. Requires Landlock ABI 3 or later, fails closed when unavailable, and rejects invalid executable formats without a shell fallback.
+
+- Linux glibc bindings load on glibc 2.28 and newer, matching Node.js's own Linux requirement; 0.4.2 and 0.5.0 required glibc 2.34 and failed to load on hosts such as Ubuntu 20.04 and RHEL 8. Thanks @guhyun9454.
+
+- Fix Windows native loading on systems without the Visual C++ redistributable, while retaining the OS-serviced Universal CRT. Thanks @paulcam206.
+
+- Read macOS protected-process identities from validated kernel records when libproc denies access, allowing ancestry walks through Terminal login processes without treating unknown ancestors as complete. Thanks @Stardust-LV.
+
+- Include code signatures on both macOS native bindings and verify their integrity before packaging.
+
+## 0.5.0 - 2026-11-05
+
+**Highlights:** Add private stdin for Windows Job children and harden release provenance verification and build downloads.
+
+- Add opt-in private stdin for Windows Job children, with explicit nonblocking prefix writes, backpressure and broken-pipe observations, and owned EOF closure; default NUL input and atomic job admission are unchanged.
+
+- Patch denial-of-service issues in the release provenance verifier's dependency chain.
+
 - Harden build and release downloads against compromised CA keys with patched Node, pnpm, Bun, and Alpine system trust stores. Thanks @joshavant.
 
 ## 0.4.2 - 2026-10-19

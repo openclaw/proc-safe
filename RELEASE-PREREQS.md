@@ -16,6 +16,11 @@ Finalize a dated, nonempty changelog section and verify `pnpm release:notes X.Y.
 Run `pnpm check`, `cargo test --workspace --locked`, `cargo clippy --workspace --locked -- -D warnings`,
 `pnpm native:build`, `pnpm package:smoke`, and `git diff --check`. All ten native bindings must
 pass main-thread and Worker runtime checks. Host-only smoke is not foreign-platform proof.
+Windows staging and package collection also verify x64/ARM64 PE dependencies: OS UCRT
+must remain dynamic, with no external VC redistributable dependency. Tool-equipped
+Windows CI runners can mask missing runtime prerequisites. Keep clean-Windows proof
+separate: run the exact packed root/platform tarballs without a VC redistributable
+on Node 22 and 24, on main and Worker threads, and record architecture-specific gaps.
 
 Apply the coordinator-approved branch/tag rulesets first. The annotated protected `vX.Y.Z`
 tag must point to reviewed, green, latest main. Never move a release tag. The workflow validates
@@ -40,7 +45,7 @@ Leave clean synchronized main and follow the repository's Unreleased convention.
 
 After all eleven public packages are published and cryptographically verified, fresh consumer
 directories install the exact root version from `https://registry.npmjs.org`. This gate runs on
-xcode-27 (ARM64), macos-26-intel, ubuntu-latest, ubuntu-24.04-arm, windows-latest, and
+xcode-27 (ARM64 and x64 via Rosetta), ubuntu-latest, ubuntu-24.04-arm, windows-latest, and
 windows-11-arm. Each runner checks its architecture and the exact matching native package,
 imports every exported subpath, and runs supported read-only calls with default optional
 settings on Node 24 and Bun, both on the main thread and in a Worker. It includes a full default
@@ -61,10 +66,16 @@ Native CI also runs this smoke against its local root and platform tarballs on e
 FreeBSD uses Node only, as in the existing runtime proof. Local tarballs install once, with no
 retry; the public release gate always uses the registry path.
 
-The Intel runner is required for the native x64 command-inspection contract: Rosetta
-deliberately reports that capability as unsupported. ARM64 CI separately verifies that refusal.
-Native addon deployment targets remain macOS 10.12 for x64 and macOS 11.0 for ARM64;
+All macOS jobs use xcode-27. The x64 addon is cross-built and tested under Rosetta,
+including identity, census, package installation and explicit command-inspection refusal.
+Native Intel command inspection remains supported but requires separate Intel hardware proof.
+Native addon deployment targets remain macOS 10.12 for x64 and macOS 11.0 for ARM64,
+and glibc 2.28 for Linux GNU (linked in a manylinux_2_28 container, then checked by symbol version);
 Node.js keeps its own supported operating-system requirements.
+
+Both macOS addon architectures receive ad-hoc code signatures before staging and
+must pass `codesign --verify --strict`. These signatures validate Mach-O code
+integrity; npm registry signatures and protected-tag provenance authenticate the publisher.
 
 To build and verify all release packages on current main without creating a tag or
 publishing, dispatch `release.yml` with the current package `version` and `dry_run=true`.

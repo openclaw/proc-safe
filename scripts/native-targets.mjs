@@ -87,6 +87,9 @@ export const nativeTargets = [
 export function nativePackageDirectory(target) {
   return new URL(`../packages/${target.label}/`, import.meta.url);
 }
+export function filesystemLauncherArtifact(target) {
+  return target.os === "linux" ? `proc-safe-filesystem-launch.${target.label}` : undefined;
+}
 export function hostNativeTarget() {
   const base = `${process.platform}-${process.arch}`;
   const suffix = process.platform === "win32" ? "-msvc" : process.platform === "linux" ? (process.report?.getReport().header?.glibcVersionRuntime ? "-gnu" : "-musl") : "";

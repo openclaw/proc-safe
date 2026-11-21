@@ -9,7 +9,7 @@ const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const raw = JSON.parse(execFileSync(process.execPath, [resolveNpmCli(), "pack", "--dry-run", "--json", "--ignore-scripts"], { encoding: "utf8" }));
 const packed = normalizePackResult(raw, pkg.name);
 const files = packed.files.map(f => f.path);
-for (const subpath of ["identity", "darwin", "inspect", "reaper", "diagnostics", "test-support", "systemd", "windows-job", "windows-token", "index", "errors"]) {
+for (const subpath of ["filesystem-launch", "identity", "darwin", "inspect", "reaper", "diagnostics", "test-support", "systemd", "windows-job", "windows-token", "index", "errors"]) {
   assert.ok(files.includes(`dist/${subpath}.js`));
   assert.ok(files.includes(`dist/${subpath}.d.ts`));
 }
@@ -25,6 +25,9 @@ for (const target of nativeTargets) {
   assert.deepEqual(native.cpu, [target.cpu]);
   assert.deepEqual(native.libc, target.libc ? [target.libc] : undefined);
   assert.equal(native.main, "proc-safe-native.node");
-  assert.deepEqual(native.files, target.os === "win32" ? ["proc-safe-native.node", "proc-safe-spawn.exe"] : ["proc-safe-native.node"]);
+  assert.deepEqual(native.files, ["proc-safe-native.node",
+    ...(target.os === "win32" ? ["proc-safe-spawn.exe"] : []),
+    ...(target.os === "linux" ? ["proc-safe-filesystem-launch"] : []),
+  ]);
 }
 console.log(`Packed entry points and ${nativeTargets.length} target manifests verified`);

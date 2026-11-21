@@ -57,3 +57,9 @@ corrections since the process was born: historical epoch time cannot be recovere
 after those corrections. The estimate can change between reads, while
 `startTimeSinceBootMicros` remains stable and tick-quantized. Use the latter for
 identity and parentage comparisons. Neither value is cached.
+
+On macOS, protected processes such as `login` can deny `proc_pidinfo` while
+still exposing their exact birth time and parent through `KERN_PROC_PID`.
+Identity reads validate that kernel record before returning it. If both native
+interfaces deny access, the read still throws `access-denied`; ancestry never
+labels an unreadable parent as a complete walk.

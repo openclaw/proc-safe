@@ -11,6 +11,7 @@ export function installPinTestBinding() {
   assert.equal(typeof injected.failNextWindowsJobAssignment, "function");
   assert.equal(typeof injected.inspectWindowsPinAccess, "function");
   assert.equal(typeof injected.openWindowsPinWithoutDebug, "function");
+  assert.equal(typeof injected.interceptNextWindowsJobInput, "function");
   let lastNativePin;
   require.cache[nativePath] = { id: nativePath, filename: nativePath, loaded: true, exports: {
     ...injected,
@@ -18,6 +19,7 @@ export function installPinTestBinding() {
   } };
   return {
     injectAssignmentFailure: injected.failNextWindowsJobAssignment,
+    interceptNextInput: injected.interceptNextWindowsJobInput,
     inspectPinAccess: () => injected.inspectWindowsPinAccess(lastNativePin),
     openPinWithoutDebug(pid, access) {
       try { return injected.openWindowsPinWithoutDebug(pid, access); }

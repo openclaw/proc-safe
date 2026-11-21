@@ -8,6 +8,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isMainThread, parentPort, Worker, workerData } from "node:worker_threads";
 import { setTimeout as delay } from "node:timers/promises";
+import { assertDefaultAncestry } from "./ancestry-proof-assertions.mjs";
 
 const packageName = "@openclaw/proc-safe";
 
@@ -35,10 +36,12 @@ async function probe(version, target) {
   assert.equal(native.loaded, true);
   assert.equal(native.packageName, target);
   assert.equal(native.packageVersion, version);
+  const translated = process.platform === "darwin" && process.arch === "x64" &&
+    execFileSync("/usr/sbin/sysctl", ["-in", "sysctl.proc_translated"], { encoding: "utf8" }).trim() === "1";
   const expected = {
     "./identity": true,
     "./darwin": process.platform === "darwin",
-    "./inspect": ["darwin", "win32"].includes(process.platform),
+    "./inspect": ["darwin", "win32"].includes(process.platform) && !translated,
     "./windows-job": process.platform === "win32",
     "./windows-token": process.platform === "win32",
     "./reaper": process.platform === "linux",
@@ -47,6 +50,23 @@ async function probe(version, target) {
   };
   for (const [subpath, module] of Object.entries(modules)) {
     if ([".", "./errors"].includes(subpath)) continue;
+    if (subpath === "./filesystem-launch") {
+      assert.equal(typeof module.prepareFilesystemRestrictedLaunch, "function");
+      const options = {
+        executable: process.execPath,
+        args: ["-e", "process.stdout.write('filesystem-launch-ok')"],
+        readOnlyPaths: ["/"],
+        readWritePaths: [],
+      };
+      if (process.platform === "linux") {
+        // Exercise the installed executable, not a workspace copy or native addon probe.
+        const launch = module.prepareFilesystemRestrictedLaunch(options);
+        assert.equal(execFileSync(launch.command, launch.args, { encoding: "utf8", timeout: 5000 }), "filesystem-launch-ok");
+      } else {
+        assert.throws(() => module.prepareFilesystemRestrictedLaunch(options), { code: "unsupported-platform" });
+      }
+      continue;
+    }
     assert.equal(typeof module.isSupported, "function", `${subpath}.isSupported`);
     const supported = module.isSupported();
     if (subpath === "./systemd") {
@@ -63,20 +83,19 @@ async function probe(version, target) {
   assert.ok(Number.isSafeInteger(identity.startTimeMicros) && identity.startTimeMicros > 0);
   // Intentionally omit options: the first published release failed walking to launchd.
   const ancestry = modules["./identity"].readProcessAncestry(process.pid);
-  assert.ok(ancestry !== null);
-  assert.ok(Array.isArray(ancestry.chain) && ancestry.chain.length > 0);
-  assert.equal(ancestry.chain[0].pid, process.pid);
-  assert.ok(ancestry.chain.every(entry => entry.pid > 1));
-  assert.ok(ancestry.complete === true || ancestry.stoppedBy === "unreadable-parent",
-    "default ancestry must complete or explicitly report an unreadable parent");
+  assertDefaultAncestry(ancestry, process.pid);
   if (process.platform === "darwin") {
     const coalition = modules["./darwin"].readProcessCoalition(process.pid);
     assert.ok(coalition && typeof coalition.id === "bigint" && coalition.id > 0n);
   }
   if (["darwin", "win32"].includes(process.platform)) {
-    const command = modules["./inspect"].readProcessCommand(process.pid);
-    assert.ok(command?.executable && command.argv.length > 0);
-    assert.deepEqual(command.environment, {});
+    if (translated) {
+      assert.throws(() => modules["./inspect"].readProcessCommand(process.pid), { code: "unsupported-platform" });
+    } else {
+      const command = modules["./inspect"].readProcessCommand(process.pid);
+      assert.ok(command?.executable && command.argv.length > 0);
+      assert.deepEqual(command.environment, {});
+    }
     const rows = modules["./inspect"].listProcesses({ timeoutMs: 5000 });
     assert.ok(rows.some(row => row.pid === process.pid && row.parentPid === identity.parentPid && row.owner === "same"));
   }
@@ -127,6 +146,7 @@ if (!isMainThread) {
   assert.equal(message, "passed");
   assert.deepEqual(await exit, [0]);
 } else {
+  const { runNpm } = await import("./npm-cli.mjs");
   const [version, ...args] = process.argv.slice(2);
   assert.match(version ?? "", /^\d+\.\d+\.\d+(?:-[\da-zA-Z.-]+)?$/, "usage: node scripts/installed-smoke.mjs <exact-version> [--bun] [--tarballs <root.tgz> <platform.tgz>]");
   const withBun = args[0] === "--bun";
@@ -149,9 +169,13 @@ if (!isMainThread) {
     writeFileSync(env.npm_config_userconfig, "");
     writeFileSync(env.npm_config_globalconfig, "");
     writeFileSync(join(directory, "package.json"), JSON.stringify({ private: true, type: "module" }));
-    // Copy only this standalone script. All package resolution now starts outside the checkout.
+    // Copy the probes. All package resolution now starts outside the checkout.
     const script = join(directory, "installed-smoke.mjs");
     copyFileSync(fileURLToPath(import.meta.url), script);
+    copyFileSync(new URL("./ancestry-proof-assertions.mjs", import.meta.url), join(directory, "ancestry-proof-assertions.mjs"));
+    const breakawayProof = process.platform === "win32" && tarballs.length
+      ? join(directory, "windows-breakaway-proof.mjs") : undefined;
+    if (breakawayProof) copyFileSync(new URL("./windows-breakaway-proof.mjs", import.meta.url), breakawayProof);
     const installArgs = ["install", ...(tarballs.length ? tarballs : [`${packageName}@${version}`]),
       "--registry=https://registry.npmjs.org", "--no-audit", "--no-fund", "--fetch-retries=0", "--fetch-timeout=30000"];
     const pauses = tarballs.length ? [0] : [0, 5000, 10000, 20000, 40000];
@@ -160,9 +184,8 @@ if (!isMainThread) {
       try {
         rmSync(join(directory, "node_modules"), { recursive: true, force: true });
         rmSync(join(directory, "package-lock.json"), { force: true });
-        // cmd is needed only for npm.cmd; all arguments are fixed, exact versions or trusted local paths.
-        execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", installArgs,
-          { cwd: directory, env, stdio: "inherit", timeout: 120000, shell: process.platform === "win32" });
+        // Keep installation on the same Node architecture as the package probes.
+        runNpm(installArgs, { cwd: directory, env, stdio: "inherit", timeout: 120000 });
         // npm can succeed while an optional platform tarball is still propagating.
         const installed = createRequire(script);
         assert.equal(installed(`${packageName}/package.json`).version, version);
@@ -176,6 +199,10 @@ if (!isMainThread) {
     // Behavioral failures are terminal: only registry installation is retried.
     for (const runtime of [process.execPath, ...(withBun ? ["bun"] : [])]) {
       execFileSync(runtime, [script, "--probe", version, target], { cwd: directory, env, stdio: "inherit", timeout: 30000 });
+      if (breakawayProof) {
+        console.log(`Installed Windows breakaway proof (${runtime === process.execPath ? "Node" : "Bun"}, ${target})`);
+        execFileSync(runtime, [breakawayProof], { cwd: directory, env, stdio: "inherit", timeout: 60000 });
+      }
     }
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }

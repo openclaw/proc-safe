@@ -3,8 +3,8 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createInterface } from "node:readline";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
-import { bindCurrentProcessLifetimeTo, PinnedProcess, WindowsJob, spawnWindowsProcess } from "../dist/windows-job.js";
-import { readProcessCommand } from "../dist/inspect.js";
+import { bindCurrentProcessLifetimeTo, PinnedProcess, WindowsJob, spawnWindowsProcess } from "@openclaw/proc-safe/windows-job";
+import { readProcessCommand } from "@openclaw/proc-safe/inspect";
 
 const entry = new URL(import.meta.url);
 const pause = () => new Promise(resolve => setTimeout(resolve, 5));

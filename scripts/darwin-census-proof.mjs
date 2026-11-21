@@ -21,7 +21,9 @@ function observe({ pid, parentPid, state }) {
   assert.equal(root.owner, "different");
   assert.equal(root.parentPid, 0);
   assert.equal(root.processGroupId, 1);
-  assert.equal(root.identity, undefined);
+  const rootIdentity = readProcessIdentity(1);
+  assert.ok(rootIdentity, "the readable launchd kernel record must retain its identity");
+  assert.deepEqual(root.identity, rootIdentity);
   assert.ok(root.state);
   const selected = listProcesses({ timeoutMs: 5000, pids: [pid, pid] });
   if (state === "gone") {
@@ -52,7 +54,7 @@ function observe({ pid, parentPid, state }) {
   const selectedRoot = listProcesses({ timeoutMs: 5000, includeCommand: true, pids: [1] });
   assert.equal(selectedRoot.length, 1);
   assert.equal(selectedRoot[0].owner, "different");
-  assert.equal(selectedRoot[0].identity, undefined);
+  assert.deepEqual(selectedRoot[0].identity, rootIdentity);
   assert.equal(selectedRoot[0].command, undefined);
   assert.throws(() => listProcesses({ timeoutMs: Number.MIN_VALUE }), error => error.code === "timeout");
   const native = createRequire(import.meta.url)(hostNativeTarget().package);
@@ -116,11 +118,13 @@ if (!isMainThread) {
   try {
     const executable = process.argv[2] ?? join(directory, "census-child");
     if (directory) execFileSync("cc", [fileURLToPath(new URL("../test/fixtures/darwin-census.c", import.meta.url)), "-o", executable]);
-    child = spawn(executable, [], { stdio: ["pipe", "pipe", "inherit"] });
+    // PTY teardown must not send a hangup to the test runner's process group.
+    child = spawn(executable, [], { stdio: ["pipe", "pipe", "inherit"], detached: true });
     closed = once(child, "close");
     const lines = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
     const pid = Number((await lines.next()).value);
     assert.ok(Number.isInteger(pid) && pid > 0);
+    assert.equal(listProcesses({ timeoutMs: 5000, pids: [child.pid] })[0].processGroupId, child.pid);
     // BSD process status stays runnable while this process's thread waits on a pipe.
     await proveBoth({ pid, parentPid: child.pid, state: "running" });
     child.stdin.write("s");

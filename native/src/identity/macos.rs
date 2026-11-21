@@ -4,6 +4,15 @@ use napi::Result;
 use std::mem::{size_of, zeroed};
 
 pub fn read(pid: u32) -> Result<Option<ProcessIdentity>> {
+    read_identity(pid, true)
+}
+
+pub(crate) fn read_for_command(pid: u32) -> Result<Option<ProcessIdentity>> {
+    // A readable kernel identity does not grant access to protected arguments.
+    read_identity(pid, false)
+}
+
+fn read_identity(pid: u32, allow_denied_kernel_record: bool) -> Result<Option<ProcessIdentity>> {
     // libc's repr(C) structure follows the public ABI on both arm64 and x86_64.
     let mut info: libc::proc_bsdinfo = unsafe { zeroed() };
     let size = size_of::<libc::proc_bsdinfo>();
@@ -21,7 +30,10 @@ pub fn read(pid: u32) -> Result<Option<ProcessIdentity>> {
     };
     if actual <= 0 {
         let error = std::io::Error::last_os_error();
-        if error.raw_os_error() == Some(libc::ESRCH) {
+        if error.raw_os_error() == Some(libc::ESRCH)
+            || (allow_denied_kernel_record
+                && matches!(error.raw_os_error(), Some(libc::EPERM | libc::EACCES)))
+        {
             return read_kernel_object(pid);
         }
         return Err(io(error));

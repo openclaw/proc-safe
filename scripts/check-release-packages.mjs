@@ -8,6 +8,7 @@ import { nativeTargets, hostNativeTarget, nativePackageDirectory } from "./nativ
 import { resolveNpmCli } from "./npm-cli.mjs";
 import { normalizePackResult } from "./npm-pack-result.mjs";
 import { startConsumerRegistry } from "./consumer-registry.mjs";
+import { verifyWindowsRuntime } from "./windows-runtime.mjs";
 
 const run = promisify(execFile);
 const npm = resolveNpmCli();
@@ -15,6 +16,8 @@ const output = resolve("release-artifacts");
 mkdirSync(output, { recursive: true });
 const rootPackage = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const host = hostNativeTarget();
+const translated = process.platform === "darwin" && process.arch === "x64" &&
+  execFileSync("/usr/sbin/sysctl", ["-in", "sysctl.proc_translated"], { encoding: "utf8" }).trim() === "1";
 assert.ok(host, "host must be a supported release target");
 const targets = process.argv.includes("--allow-host-only") ? [host] : nativeTargets;
 const manifest = [];
@@ -33,9 +36,19 @@ function pack(directory) {
 for (const target of targets) {
   const directory = nativePackageDirectory(target);
   assert.ok(existsSync(new URL("proc-safe-native.node", directory)), `missing binary ${target.label}`);
+  if (target.os === "win32") verifyWindowsRuntime(readFileSync(new URL("proc-safe-native.node", directory)), target.cpu);
   assert.ok(!readFileSync(new URL("proc-safe-native.node", directory)).includes(Buffer.from("failNextWindowsJobAssignment")), `fault injection is forbidden in published artifacts: ${target.label}`);
   assert.ok(!readFileSync(new URL("proc-safe-native.node", directory)).includes(Buffer.from("openWindowsPinWithoutDebug")), `test impersonation is forbidden in published artifacts: ${target.label}`);
-  if (target.os === "win32") assert.ok(existsSync(new URL("proc-safe-spawn.exe", directory)), `missing breakaway launcher ${target.label}`);
+  assert.ok(!readFileSync(new URL("proc-safe-native.node", directory)).includes(Buffer.from("interceptNextWindowsJobInput")), `test interception is forbidden in published artifacts: ${target.label}`);
+  if (target.os === "linux") {
+    const launcher = new URL("proc-safe-filesystem-launch", directory);
+    assert.ok(existsSync(launcher), `missing filesystem launcher ${target.label}`);
+  }
+  if (target.os === "win32") {
+    const launcher = new URL("proc-safe-spawn.exe", directory);
+    assert.ok(existsSync(launcher), `missing breakaway launcher ${target.label}`);
+    verifyWindowsRuntime(readFileSync(launcher), target.cpu, { dll: false });
+  }
   pack(directory);
 }
 pack(new URL("../", import.meta.url));
@@ -64,6 +77,13 @@ try {
       import * as inspect from '@openclaw/proc-safe/inspect';
       import * as windowsJobs from '@openclaw/proc-safe/windows-job';
       import * as windowsToken from '@openclaw/proc-safe/windows-token';
+      import { prepareFilesystemRestrictedLaunch } from '@openclaw/proc-safe/filesystem-launch';
+      import { execFileSync } from 'node:child_process';
+      if (process.platform === 'linux') {
+        const launch = prepareFilesystemRestrictedLaunch({ executable: process.execPath,
+          args: ['-e', 'process.stdout.write("filesystem-launch")'], readOnlyPaths: ['/'], readWritePaths: [] });
+        assert.equal(execFileSync(launch.command, launch.args, { encoding: 'utf8' }), 'filesystem-launch');
+      }
       assert.equal(windowsToken.isSupported(), process.platform === 'win32');
       if (process.platform === 'win32') assert.equal(windowsToken.readCurrentAppContainerSid(), null);
       const require = createRequire(import.meta.url);
@@ -73,7 +93,8 @@ try {
       assert.equal(typeof systemd.SystemdBus.connectPrivatePeer, 'function');
       assert.equal(typeof systemd.isSupported(), 'boolean');
       if (process.platform !== 'linux') assert.equal(systemd.isSupported(), false);
-      assert.equal(inspect.isSupported(), ['darwin', 'win32'].includes(process.platform));
+      assert.equal(inspect.isSupported(), ['darwin', 'win32'].includes(process.platform) && !${translated});
+      if (${translated}) assert.throws(() => inspect.readProcessCommand(process.pid), { code: 'unsupported-platform' });
       if (inspect.isSupported()) assert.ok(inspect.readProcessCommand(process.pid).argv.length > 0);
       assert.equal(windowsJobs.isSupported(), process.platform === 'win32');
       if (process.platform === 'win32') {
@@ -107,6 +128,13 @@ try {
       if (inspect.isSupported() && !inspect.readProcessCommand(process.pid).argv.length) throw new Error('missing command');
       import * as windowsJobs from '@openclaw/proc-safe/windows-job';
       import * as windowsToken from '@openclaw/proc-safe/windows-token';
+      import { prepareFilesystemRestrictedLaunch } from '@openclaw/proc-safe/filesystem-launch';
+      import { execFileSync } from 'node:child_process';
+      if (process.platform === 'linux') {
+        const launch = prepareFilesystemRestrictedLaunch({ executable: process.execPath,
+          args: ['-e', 'process.stdout.write("filesystem-launch")'], readOnlyPaths: ['/'], readWritePaths: [] });
+        assert.equal(execFileSync(launch.command, launch.args, { encoding: 'utf8' }), 'filesystem-launch');
+      }
       assert.equal(windowsToken.isSupported(), process.platform === 'win32');
       if (process.platform === 'win32') assert.equal(windowsToken.readCurrentAppContainerSid(), null);
       assert.equal(windowsJobs.isSupported(), process.platform === 'win32');

@@ -1,6 +1,6 @@
 {
   "name": "@openclaw/proc-safe-linux-arm64-gnu",
-  "version": "0.4.2",
+  "version": "0.6.0",
   "description": "linux-arm64-gnu native binding for @openclaw/proc-safe.",
   "license": "MIT",
   "author": "OpenClaw Foundation (https://openclaw.org)",
@@ -21,7 +21,8 @@
   ],
   "main": "proc-safe-native.node",
   "files": [
-    "proc-safe-native.node"
+    "proc-safe-native.node",
+    "proc-safe-filesystem-launch"
   ],
   "engines": {
     "node": ">=22"

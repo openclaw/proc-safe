@@ -32,9 +32,9 @@ const sameProcess =
     (owner.startTimeSinceBootMicros ?? owner.startTimeMicros);
 ```
 
-No runtime downloads, postinstall scripts, shell fallbacks, or FFI engine. Each capability is a
-Rust N-API function behind a narrow TypeScript API, and the native addon loads on first use —
-never at import time.
+No runtime downloads, postinstall scripts, shell fallbacks, or FFI engine. Capabilities expose narrow TypeScript APIs backed by Rust. Native addons load on first use,
+never at import time; filesystem-restricted launch prepares a packaged exec helper for your
+existing supervisor.
 
 ## Contents
 
@@ -54,6 +54,8 @@ pnpm add @openclaw/proc-safe
 
 Node.js 22 or newer. The matching prebuilt binary arrives as an optional platform package; there
 is nothing to compile. Bun is supported on every platform it ships for.
+Windows x64 and ARM64 bindings use the OS-provided Universal CRT (UCRT) and statically
+linked compiler runtime; no separate Visual C++ redistributable installation is required.
 
 ## Capabilities
 
@@ -61,6 +63,7 @@ Every capability is its own subpath, so you only load what you use.
 
 | Subpath | What it answers | Platforms |
 |---|---|---|
+| [`/filesystem-launch`](docs/filesystem-launch.md) | Prepare a filesystem-restricted exec for an existing supervisor | Linux, Landlock ABI 3+ |
 | [`/identity`](docs/identity.md) | Who is this PID: parent, exact birth time, exited-but-retained state, ancestry | Darwin, Linux, Windows, FreeBSD |
 | [`/inspect`](docs/inspect.md) | Executable, argv, selected env keys; complete process census with parentage and ownership; Darwin groups and state | Darwin, Windows |
 | [`/windows-token`](docs/windows-token.md) | Is this process in an AppContainer, and which SID identifies it | Windows |
@@ -72,8 +75,9 @@ Every capability is its own subpath, so you only load what you use.
 | [`/test-support`](docs/test-support.md) | Test fixtures: seccomp group-kill denial, raw console-free spawns | Linux, Windows |
 | `/errors` | `ProcSafeError` and its codes | everywhere |
 
-Every capability subpath imports on every platform and exports `isSupported()`, which never throws.
-Calling a capability where it doesn't exist throws `unsupported-platform` — no silent no-ops.
+Capability subpaths import on every platform. Most export a non-throwing `isSupported()` probe.
+For `/filesystem-launch`, preparation checks the platform and locates the helper. The helper
+checks kernel support at launch and exits before starting the target if it cannot apply the restrictions.
 
 ## Three outcomes, never guess
 
@@ -168,7 +172,9 @@ if (owner) bindCurrentProcessLifetimeTo(owner);
 ```
 
 Children join the Job atomically at creation, inherit only the handles you allow, and stream
-output without blocking. Pins request least-privilege access by intended use. Lifetime transfer
+output without blocking. Opt-in `stdin: "pipe"` adds explicit `writeStdin(Buffer)` prefix
+attempts and `closeStdin()` without automatic input release; NUL remains the default.
+Pins request least-privilege access by intended use. Lifetime transfer
 rolls back cleanly if anything fails halfway. [Windows jobs](docs/windows-job.md).
 
 ## Linux child reaping
@@ -181,7 +187,9 @@ const state = inspectChildWaitState(adoptedPid);   // never reaps
 if (state.kind === "exited") reapChild(adoptedPid);
 ```
 
-There is deliberately no "reap any child": libuv owns the exit status of the children Node spawned.
+Strict child observation requires Linux 4.7 or newer. `childObservationSupported()`
+checks the required wait capability; unsupported kernels report `unsupported-platform`
+instead of a generic wait error. There is deliberately no "reap any child": libuv owns the exit status of the children Node spawned.
 Real-time signal exits report `signalNumber` even when Node has no name for the signal.
 [Child reaping](docs/reaper.md).
 
@@ -231,7 +239,7 @@ and in Workers, under Node 22 and 24 (and Bun where available):
 | OS | Architectures |
 |---|---|
 | macOS | arm64, x64 |
-| Linux (glibc and musl) | x64, arm64 |
+| Linux (glibc 2.28+ and musl) | x64, arm64 |
 | Windows | x64, arm64 |
 | FreeBSD 14.4+ | x64, arm64 |
 

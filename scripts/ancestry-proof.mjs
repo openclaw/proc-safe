@@ -4,14 +4,12 @@ import { once } from "node:events";
 import { readProcessAncestry } from "../dist/identity.js";
 import { ProcSafeError } from "../dist/errors.js";
 import { proveAncestryTransitions } from "./ancestry-transitions.mjs";
+import { assertDefaultAncestry } from "./ancestry-proof-assertions.mjs";
 
 export async function proveAncestry() {
   assert.equal(proveAncestryTransitions(), 25);
   const full = readProcessAncestry(process.pid);
-  assert.equal(full.chain[0].pid, process.pid);
-  assert.ok(full.chain.every(identity => identity.pid > 1));
-  assert.ok(full.complete || full.stoppedBy === "unreadable-parent");
-  assert.equal(full.complete, ["root", "missing-parent", "recycled-parent", "through-pid"].includes(full.stoppedBy));
+  assertDefaultAncestry(full, process.pid);
   const self = readProcessAncestry(process.pid, { throughPid: process.pid, maxDepth: 1 });
   assert.deepEqual(self.chain.map(identity => identity.pid), [process.pid]);
   assert.equal(self.complete, true);

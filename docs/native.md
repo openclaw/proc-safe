@@ -11,8 +11,14 @@ It caches load attempts, never starts child processes, and never downloads or co
 
 Windows jobs live in `windows_job.rs`. Native owners close job, process, and pipe handles;
 JavaScript never receives numeric handles. Child creation supplies both JOB_LIST and
-HANDLE_LIST to CreateProcessW, so admission precedes execution and only NUL stdin and
-the two output writers are inherited. Each pipe has one reader: a peek followed by a read
+HANDLE_LIST to CreateProcessW, so admission precedes execution and only the selected stdin
+reader (NUL by default) and the two output writers are inherited. Opt-in private input uses
+a local byte-mode named pipe: a non-inheritable NOWAIT server writer makes one bounded
+write attempt and reports its accepted prefix, while the child reader keeps blocking read semantics.
+The system cryptographic RNG supplies an unpredictable name; first-instance protection,
+remote-client rejection, and creator-PID validation precede exposing the writer. No background
+I/O owns a borrowed JavaScript buffer. The native child owner closes the writer on explicit
+input close, child close, or finalization. Root exit does not decide stream state. Each pipe has one reader: a peek followed by a read
 bounded to the available bytes cannot wait for a writer. Root exit, pipe EOF, and job
 extinction are separate observations. Pinned processes reuse identity's handle-based reader.
 Their intended access mode determines the exact OpenProcess rights. Native mode checks
@@ -39,6 +45,18 @@ is divided as a 64-bit integer before conversion to a JavaScript number. Handles
 when an observation fails. GetExitCodeProcess reports retained exited objects; an exit timestamp disambiguates
 the reserved STILL_ACTIVE value from an application that actually exits with code 259. Access denial is never reported as a missing process.
 
+Windows x64 and ARM64 release bindings use dynamic OS-provided UCRT and static
+compiler-specific VCRUNTIME. This avoids an external VC redistributable prerequisite
+while retaining Windows servicing of the UCRT. The producer preserves inherited
+Rust flags, including Cargo's encoded-flags precedence, and applies this policy only
+to MSVC targets; other platforms' linkage is unchanged.
+Before staging or packing, PE machine and import/delay-import checks reject external
+VC runtime dependencies and require OS UCRT linkage. These artifact checks do not
+prove runtime loading: test the exact packed root/platform pair on a separate clean
+Windows runtime environment without Build Tools or a VC redistributable, using Node
+22 and 24, real self identity and inherited-option Workers. Record each architecture
+separately; cross-compilation is not ARM64 runtime proof.
+
 Linux reads procfs stat using the final comm parenthesis and brackets it with samples of
 `CLOCK_REALTIME` and `CLOCK_BOOTTIME`. Intersecting the samples' offset intervals detects
 observed wall-clock changes and bounds sampling uncertainty to one clock tick; a disjoint
@@ -58,7 +76,13 @@ identifies zombies. Visibility denial can also return ESRCH. A cached policy sna
 that means absence or `access-denied` with a `visibility-policy` reason. Policy
 read failures are restricted. See [identity and visibility](identity.md).
 
-FreeBSD CI uses 14.4. Dependencies and TypeScript output are prepared on Linux and
+FreeBSD CI uses 14.4. Its major-line pkg installation must pass runtime admission
+before native proof: the actual Node executable must match the guest platform,
+architecture, selected major, and patched matrix floor (22.23.4 or 24.22.1).
+Newer stable patches in that selected major are accepted and the actual identity
+is logged. An older package fails with pkg-upgrade guidance; a matrix label alone
+is not evidence of the installed patch.
+Dependencies and TypeScript output are prepared on Linux and
 synced into the VM; Cargo builds the addon under the FreeBSD kernel. The portable
 native suite runs directly with Node, including the unreaped-zombie test and real
 Workers, followed by a root-only npm consumer install. ARM64 CPU execution uses
@@ -125,6 +149,11 @@ validates returned lengths and the SID bounds before converting it to a string,
 and closes the token handle on every path. Queries are fresh on the calling
 thread; thread impersonation does not change which process token is inspected.
 
+Filesystem-restricted launch uses a separate single-threaded binary, packaged alongside
+the Linux addon. It creates a Landlock ruleset and sets no-new-privileges before exec,
+so all target runtime threads inherit the same domain. The TypeScript API prepares
+arguments without spawning or loading the addon; the existing caller owns descriptors,
+child supervision and filesystem policy. See [filesystem launch](filesystem-launch.md).
 
 The Windows platform packages also contain `proc-safe-spawn.exe`. This native-only
 launcher preserves libuv's standard handles and CRT descriptor table while creating

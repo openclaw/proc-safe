@@ -3,6 +3,8 @@ node_modules/
 target/
 native/*.node
 packages/*/*.node
+native/proc-safe-filesystem-launch.*
+packages/*/proc-safe-filesystem-launch
 native/index.js
 native/index.d.ts
 coverage/

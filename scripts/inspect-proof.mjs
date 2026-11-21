@@ -160,13 +160,18 @@ async function suspendedProof() {
   const outcomes = new Set();
   // Cover every possible alignment of the argv/envp tail before dyld clears Apple data.
   for (let padding = 0; padding < 8; padding++) {
-    const child = spawn(fixture, ["--suspended", process.execPath, "x".repeat(padding)], { stdio: ["ignore", "pipe", "inherit"] });
+    // A stopped member must not expose the runner's group to orphan-group hangups.
+    const child = spawn(fixture, ["--suspended", process.execPath, "x".repeat(padding)], { stdio: ["ignore", "pipe", "inherit"], detached: true });
     const closed = once(child, "close");
     let pid;
     try {
       const [ready] = await once(child.stdout, "data");
       pid = Number(String(ready).trim());
       assert.ok(Number.isInteger(pid) && pid > 0);
+      const groups = listProcesses({ timeoutMs: 5000, pids: [process.pid, child.pid, pid] });
+      assert.equal(groups.find(row => row.pid === child.pid).processGroupId, child.pid);
+      assert.equal(groups.find(row => row.pid === pid).processGroupId, child.pid);
+      assert.notEqual(groups.find(row => row.pid === process.pid).processGroupId, child.pid);
       const outcome = observeSuspended(pid);
       outcomes.add(outcome);
       const worker = new Worker(new URL(import.meta.url), { workerData: { pid, suspended: true } });

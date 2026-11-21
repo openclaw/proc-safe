@@ -24,7 +24,7 @@ describe("public contracts", () => {
       let loads = 0;
       process.dlopen = () => { loads++; throw new Error('addon was loaded during import'); };
       process.env.PROC_SAFE_NATIVE = 'require';
-      for (const name of ['index', 'errors', 'identity', 'darwin', 'inspect', 'reaper', 'diagnostics', 'test-support', 'systemd', 'windows-job', 'windows-token']) await import('./dist/' + name + '.js');
+      for (const name of ['filesystem-launch', 'index', 'errors', 'identity', 'darwin', 'inspect', 'reaper', 'diagnostics', 'test-support', 'systemd', 'windows-job', 'windows-token']) await import('./dist/' + name + '.js');
       if (loads !== 0) throw new Error('import attempted native loading');
       console.log('lazy');
     `], { encoding: "utf8" });
@@ -33,6 +33,7 @@ describe("public contracts", () => {
   test("off never advertises native capabilities and operations fail explicitly", () => {
     const output = execFileSync(process.execPath, ["--input-type=module", "-e", `
       const identity = await import('./dist/identity.js');
+      const filesystem = await import('./dist/filesystem-launch.js');
       const darwin = await import('./dist/darwin.js');
       const inspect = await import('./dist/inspect.js');
       const jobs = await import('./dist/windows-job.js');
@@ -46,6 +47,8 @@ describe("public contracts", () => {
       try { inspect.readProcessCommand(process.pid); throw new Error('succeeded'); }
       catch (e) { if (e.code !== 'helper-unavailable' && e.code !== 'unsupported-platform') throw e; }
       try { inspect.listProcesses({ timeoutMs: 1000 }); throw new Error('succeeded'); }
+      catch (e) { if (e.code !== 'helper-unavailable' && e.code !== 'unsupported-platform') throw e; }
+      try { filesystem.prepareFilesystemRestrictedLaunch({ executable: process.execPath, readOnlyPaths: ['/'], readWritePaths: [] }); throw new Error('succeeded'); }
       catch (e) { if (e.code !== 'helper-unavailable' && e.code !== 'unsupported-platform') throw e; }
       console.log('off');
     `], { encoding: "utf8", env: { ...process.env, PROC_SAFE_NATIVE: "off" } });

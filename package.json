@@ -1,6 +1,6 @@
 {
   "name": "@openclaw/proc-safe",
-  "version": "0.4.2",
+  "version": "0.6.0",
   "description": "Typed process identity, inspection, supervision, and service-manager primitives.",
   "keywords": [
     "process",
@@ -84,6 +84,10 @@
     "./windows-token": {
       "types": "./dist/windows-token.d.ts",
       "default": "./dist/windows-token.js"
+    },
+    "./filesystem-launch": {
+      "types": "./dist/filesystem-launch.d.ts",
+      "default": "./dist/filesystem-launch.js"
     }
   },
   "scripts": {
@@ -103,23 +107,23 @@
     "benchmark:imports": "node scripts/benchmark-imports.mjs"
   },
   "optionalDependencies": {
-    "@openclaw/proc-safe-darwin-arm64": "0.4.2",
-    "@openclaw/proc-safe-darwin-x64": "0.4.2",
-    "@openclaw/proc-safe-freebsd-arm64": "0.4.2",
-    "@openclaw/proc-safe-freebsd-x64": "0.4.2",
-    "@openclaw/proc-safe-linux-arm64-gnu": "0.4.2",
-    "@openclaw/proc-safe-linux-arm64-musl": "0.4.2",
-    "@openclaw/proc-safe-linux-x64-gnu": "0.4.2",
-    "@openclaw/proc-safe-linux-x64-musl": "0.4.2",
-    "@openclaw/proc-safe-win32-arm64-msvc": "0.4.2",
-    "@openclaw/proc-safe-win32-x64-msvc": "0.4.2"
+    "@openclaw/proc-safe-darwin-arm64": "0.6.0",
+    "@openclaw/proc-safe-darwin-x64": "0.6.0",
+    "@openclaw/proc-safe-freebsd-arm64": "0.6.0",
+    "@openclaw/proc-safe-freebsd-x64": "0.6.0",
+    "@openclaw/proc-safe-linux-arm64-gnu": "0.6.0",
+    "@openclaw/proc-safe-linux-arm64-musl": "0.6.0",
+    "@openclaw/proc-safe-linux-x64-gnu": "0.6.0",
+    "@openclaw/proc-safe-linux-x64-musl": "0.6.0",
+    "@openclaw/proc-safe-win32-arm64-msvc": "0.6.0",
+    "@openclaw/proc-safe-win32-x64-msvc": "0.6.0"
   },
   "devDependencies": {
-    "@napi-rs/cli": "3.10.9",
-    "@types/node": "^26.6.5",
-    "sigstore": "5.0.0",
+    "@napi-rs/cli": "3.10.12",
+    "@types/node": "^26.6.6",
+    "sigstore": "5.0.1",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.5"
+    "vitest": "^5.1.1"
   },
   "engines": {
     "node": ">=22"
