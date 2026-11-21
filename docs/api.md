@@ -88,6 +88,7 @@ function becomeChildSubreaper(): void;
 function isChildSubreaper(): boolean;
 function inspectChildWaitState(pid?: number): ChildWaitState;
 function reapChild(pid: number): ChildExit | null;
+function childObservationSupported(): boolean;
 function isSupported(): boolean;
 ```
 
