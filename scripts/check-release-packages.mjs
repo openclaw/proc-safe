@@ -44,6 +44,11 @@ for (const target of targets) {
     const launcher = new URL("proc-safe-filesystem-launch", directory);
     assert.ok(existsSync(launcher), `missing filesystem launcher ${target.label}`);
   }
+  if (target.os === "win32") {
+    const launcher = new URL("proc-safe-spawn.exe", directory);
+    assert.ok(existsSync(launcher), `missing breakaway launcher ${target.label}`);
+    verifyWindowsRuntime(readFileSync(launcher), target.cpu, { dll: false });
+  }
   pack(directory);
 }
 pack(new URL("../", import.meta.url));

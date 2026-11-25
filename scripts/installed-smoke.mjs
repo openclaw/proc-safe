@@ -173,6 +173,9 @@ if (!isMainThread) {
     const script = join(directory, "installed-smoke.mjs");
     copyFileSync(fileURLToPath(import.meta.url), script);
     copyFileSync(new URL("./ancestry-proof-assertions.mjs", import.meta.url), join(directory, "ancestry-proof-assertions.mjs"));
+    const breakawayProof = process.platform === "win32" && tarballs.length
+      ? join(directory, "windows-breakaway-proof.mjs") : undefined;
+    if (breakawayProof) copyFileSync(new URL("./windows-breakaway-proof.mjs", import.meta.url), breakawayProof);
     const installArgs = ["install", ...(tarballs.length ? tarballs : [`${packageName}@${version}`]),
       "--registry=https://registry.npmjs.org", "--no-audit", "--no-fund", "--fetch-retries=0", "--fetch-timeout=30000"];
     const pauses = tarballs.length ? [0] : [0, 5000, 10000, 20000, 40000];
@@ -196,6 +199,10 @@ if (!isMainThread) {
     // Behavioral failures are terminal: only registry installation is retried.
     for (const runtime of [process.execPath, ...(withBun ? ["bun"] : [])]) {
       execFileSync(runtime, [script, "--probe", version, target], { cwd: directory, env, stdio: "inherit", timeout: 30000 });
+      if (breakawayProof) {
+        console.log(`Installed Windows breakaway proof (${runtime === process.execPath ? "Node" : "Bun"}, ${target})`);
+        execFileSync(runtime, [breakawayProof], { cwd: directory, env, stdio: "inherit", timeout: 60000 });
+      }
     }
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }

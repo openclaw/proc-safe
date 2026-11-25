@@ -357,7 +357,11 @@ fn main() {
             std::process::exit(259);
         }
         "tick" => {
-            std::fs::write(&args[2], std::process::id().to_string()).unwrap();
+            // Readers use the marker's existence as the signal that the PID is ready.
+            let marker = std::path::Path::new(&args[2]);
+            let pending = marker.with_extension("pending");
+            std::fs::write(&pending, std::process::id().to_string()).unwrap();
+            std::fs::rename(pending, marker).unwrap();
             loop {
                 thread::sleep(Duration::from_millis(10));
             }

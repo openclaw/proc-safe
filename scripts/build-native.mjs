@@ -37,4 +37,10 @@ if (launcherArtifact) {
     chmodSync(destination, 0o755);
   }
 }
+if (target.os === "win32") {
+  const launcher = new URL(`target/${target.rust}/release/proc-safe-spawn.exe`, root);
+  verifyWindowsRuntime(readFileSync(launcher), target.cpu, { dll: false });
+  copyFileSync(launcher, new URL(`native/proc-safe-spawn.${target.label}.exe`, root));
+  copyFileSync(launcher, new URL("proc-safe-spawn.exe", nativePackageDirectory(target)));
+}
 console.log(`Built and staged ${target.label}`);

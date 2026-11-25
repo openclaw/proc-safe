@@ -154,3 +154,10 @@ the Linux addon. It creates a Landlock ruleset and sets no-new-privileges before
 so all target runtime threads inherit the same domain. The TypeScript API prepares
 arguments without spawning or loading the addon; the existing caller owns descriptors,
 child supervision and filesystem policy. See [filesystem launch](filesystem-launch.md).
+
+The Windows platform packages also contain `proc-safe-spawn.exe`. This native-only
+launcher preserves libuv's standard handles and CRT descriptor table while creating
+an explicitly requested breakaway payload. It neither consumes Node IPC environment
+variables nor interprets stream bytes. The package build, artifact collection, and
+consumer package checks include the executable alongside the addon. No executable
+is included in the platform-independent root package.
