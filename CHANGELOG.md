@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.7.0 - 2026-11-24
+
+**Highlights:** Add opt-in Windows Job breakaway spawning and Linux child-observation capability checks.
+
 - Add opt-in Windows Job breakaway spawning with inherited stdio and JSON IPC. Ordinary children stay contained by default.
 
 - Report unsupported Linux child-observation wait masks with `unsupported-platform` instead of a generic error, document the Linux 4.7 requirement, and expose `childObservationSupported()` for capability checks. Thanks @rainman74.
