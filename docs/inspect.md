@@ -1,7 +1,7 @@
 # Process inspection
 
 `@openclaw/proc-safe/inspect` reads a process's executable and exact argument boundaries
-on native Darwin arm64/x64 and Windows arm64/x64. The subpath imports on all platforms
+on native Darwin, Linux, and Windows arm64/x64. The subpath imports on all platforms
 without loading native code. `isSupported()` never throws; it returns false on unsupported
 platforms, when the binding is unavailable or disabled, and when command inspection
 cannot establish native execution on x64 (including Rosetta or a denied translation query).
@@ -24,6 +24,21 @@ requesting multiple casing variants returns each requested spelling. Missing key
 and empty values are preserved. Names must be nonempty and contain neither
 NUL nor `=`. Windows drive-directory pseudo-variables (`=C:`) are excluded by this rule.
 No service marker, owner classification, or application policy is implied.
+
+Linux reads procfs through one retained process directory, so a reused PID cannot
+mix another process's data into the observation. Both command and environment images
+are bounded to 8 MiB each; exceeding that limit throws `incomplete`. Argument boundaries,
+including empty arguments, are preserved. Non-UTF-8 arguments, executable paths, or
+selected environment values throw `layout-mismatch`; unrelated environment values
+are not decoded. `executable` preserves the kernel's path, including a possible
+` (deleted)` suffix. `commandLine` and `cwd` remain absent on Linux.
+
+Linux environment reads normally describe the initial exec environment, rather than
+later `setenv` changes. The target can rewrite or relocate its argument and environment
+memory. A retained directory identifies the process instance, not an atomic snapshot
+across `exec` or mutations within that process. Empty command images and retained
+zombies throw `incomplete`. Restricted procfs views retain the existing identity
+absence checks; a hidden or unreadable process is never inferred to be gone.
 
 Darwin reads `KERN_PROCARGS2`, validates its returned bounds and argument count, and
 retains only requested environment entries. A filled argument buffer throws `incomplete`

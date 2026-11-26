@@ -21,7 +21,7 @@ pub struct ProcessCommand {
 pub fn inspect_supported() -> Result<bool> {
     #[cfg(target_os = "macos")]
     return macos::supported();
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     Ok(true)
 }
 
@@ -43,6 +43,8 @@ pub fn read_process_command(
     return macos::read(pid, &environment_keys);
     #[cfg(windows)]
     return windows::read(pid, &environment_keys);
+    #[cfg(target_os = "linux")]
+    return linux::read(pid, &environment_keys);
 }
 
 #[napi(object)]
@@ -72,7 +74,18 @@ pub fn list_processes(
     return windows::list(timeout_ms, include_command, pids);
     #[cfg(target_os = "macos")]
     return darwin_census::list(timeout_ms, include_command, pids);
+    #[cfg(target_os = "linux")]
+    {
+        let _ = (timeout_ms, include_command);
+        Err(failure(
+            "unsupported-platform",
+            "Linux process census is unavailable",
+        ))
+    }
 }
+
+#[cfg(target_os = "linux")]
+mod linux;
 
 #[cfg(target_os = "macos")]
 mod darwin_census;

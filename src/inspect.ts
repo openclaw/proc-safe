@@ -34,8 +34,12 @@ function commandResult(result: NonNullable<ReturnType<NonNullable<NativeBinding[
   });
 }
 
-function platformSupported(): boolean {
+function censusSupported(): boolean {
   return ["darwin", "win32"].includes(process.platform) && ["x64", "arm64"].includes(process.arch);
+}
+
+function commandSupported(): boolean {
+  return censusSupported() || process.platform === "linux" && ["x64", "arm64"].includes(process.arch);
 }
 
 /** Exact command observation; only explicitly named environment keys leave native code. */
@@ -45,7 +49,7 @@ export function readProcessCommand(pid: number, options?: { environmentKeys?: re
   if (!Array.isArray(keys) || keys.some(key => typeof key !== "string" || !key || /[=\0]/.test(key))) {
     throw new ProcSafeError("invalid-argument", "environmentKeys must contain nonempty names without NUL or equals");
   }
-  if (!platformSupported()) throw new ProcSafeError("unsupported-platform", "process command inspection requires Darwin or Windows");
+  if (!commandSupported()) throw new ProcSafeError("unsupported-platform", "process command inspection requires Darwin, Linux or Windows");
   const query = getNativeBinding()?.readProcessCommand;
   if (!query) throw new ProcSafeError("helper-unavailable", "native process command inspection is unavailable");
   try {
@@ -67,7 +71,7 @@ export function listProcesses(options: { timeoutMs: number; includeCommand?: boo
     if (!Array.isArray(options.pids)) throw new ProcSafeError("invalid-argument", "pids must be an array of platform PIDs");
     for (const pid of options.pids) validatePid(pid);
   }
-  if (!platformSupported()) {
+  if (!censusSupported()) {
     throw new ProcSafeError("unsupported-platform", "process census requires Darwin or Windows");
   }
   const query = getNativeBinding()?.listProcesses;
@@ -89,10 +93,10 @@ export function listProcesses(options: { timeoutMs: number; includeCommand?: boo
 
 export function isSupported(): boolean {
   try {
-    if (!platformSupported()) return false;
+    if (!commandSupported()) return false;
     const binding = getNativeBinding();
     return typeof binding?.readProcessCommand === "function"
-      && typeof binding.listProcesses === "function"
+      && (!censusSupported() || typeof binding.listProcesses === "function")
       && binding.inspectSupported?.() === true;
   } catch { return false; }
 }

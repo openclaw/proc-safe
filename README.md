@@ -65,7 +65,7 @@ Every capability is its own subpath, so you only load what you use.
 |---|---|---|
 | [`/filesystem-launch`](docs/filesystem-launch.md) | Prepare a filesystem-restricted exec for an existing supervisor | Linux, Landlock ABI 3+ |
 | [`/identity`](docs/identity.md) | Who is this PID: parent, exact birth time, exited-but-retained state, ancestry | Darwin, Linux, Windows, FreeBSD |
-| [`/inspect`](docs/inspect.md) | Executable, argv, selected env keys; complete process census with parentage and ownership; Darwin groups and state | Darwin, Windows |
+| [`/inspect`](docs/inspect.md) | Executable, argv, selected env keys; Darwin/Windows process census with parentage and ownership; Darwin groups and state | Darwin, Linux, Windows |
 | [`/windows-token`](docs/windows-token.md) | Is this process in an AppContainer, and which SID identifies it | Windows |
 | [`/windows-job`](docs/windows-job.md) | Spawn into a Job atomically, explicitly break away with inherited pipes, tie your lifetime to another process | Windows |
 | [`/reaper`](docs/reaper.md) | Become a subreaper, observe child wait state without consuming it, reap one specific child | Linux |

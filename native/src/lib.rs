@@ -4,7 +4,7 @@ mod darwin;
 mod diagnostics;
 mod error;
 mod identity;
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 mod inspect;
 #[cfg(target_os = "linux")]
 mod reaper;

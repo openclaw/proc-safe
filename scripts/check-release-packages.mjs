@@ -93,7 +93,7 @@ try {
       assert.equal(typeof systemd.SystemdBus.connectPrivatePeer, 'function');
       assert.equal(typeof systemd.isSupported(), 'boolean');
       if (process.platform !== 'linux') assert.equal(systemd.isSupported(), false);
-      assert.equal(inspect.isSupported(), ['darwin', 'win32'].includes(process.platform) && !${translated});
+      assert.equal(inspect.isSupported(), ['darwin', 'linux', 'win32'].includes(process.platform) && !${translated});
       if (${translated}) assert.throws(() => inspect.readProcessCommand(process.pid), { code: 'unsupported-platform' });
       if (inspect.isSupported()) assert.ok(inspect.readProcessCommand(process.pid).argv.length > 0);
       assert.equal(windowsJobs.isSupported(), process.platform === 'win32');
