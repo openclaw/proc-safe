@@ -191,7 +191,7 @@ pub fn read(pid: u32, keys: &[String]) -> Result<Option<ProcessCommand>> {
     if unsafe { libc::fstatfs(directory.as_raw_fd(), filesystem.as_mut_ptr()) } != 0 {
         return Err(io(std::io::Error::last_os_error()));
     }
-    if unsafe { filesystem.assume_init() }.f_type != libc::PROC_SUPER_MAGIC {
+    if unsafe { filesystem.assume_init() }.f_type != libc::PROC_SUPER_MAGIC as _ {
         return Err(failure("incomplete", "process directory is not procfs"));
     }
     match observe(&directory, pid, keys) {
