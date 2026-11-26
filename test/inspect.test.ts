@@ -30,7 +30,7 @@ test.each(["", "a=b", "a\0b"]) ("inspection rejects invalid environment key %j",
 
 test.runIf(process.env.PROC_SAFE_NATIVE === "require")("real command inspection and Worker boundary", () => {
   const output = execFileSync(process.execPath, ["scripts/inspect-proof.mjs"], { encoding: "utf8", timeout: 10_000 });
-  expect(JSON.parse(output)).toMatchObject({ platform: process.platform, arch: process.arch, passed: process.platform === "darwin" ? 7 : process.platform === "win32" ? 5 : 1 });
+  expect(JSON.parse(output)).toMatchObject({ platform: process.platform, arch: process.arch, passed: process.platform === "darwin" ? 7 : process.platform === "win32" ? 5 : process.platform === "linux" ? 13 : 1 });
 });
 
 test.runIf(process.env.PROC_SAFE_NATIVE === "require" && process.platform === "win32")("real x86 inspection fixture uses OS UCRT without a VC redistributable", () => {

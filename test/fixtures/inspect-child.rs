@@ -1,6 +1,10 @@
 use std::process::Command;
 
 fn main() {
+    #[cfg(target_os = "linux")]
+    if linux_fixture() {
+        return;
+    }
     let args: Vec<String> = std::env::args().skip(1).collect();
     #[cfg(target_os = "macos")]
     if args.first().map(String::as_str) == Some("--suspended") {
@@ -40,6 +44,60 @@ fn main() {
     }
     println!("{}", std::process::id());
     std::thread::sleep(std::time::Duration::from_secs(60));
+}
+
+#[cfg(target_os = "linux")]
+fn linux_fixture() -> bool {
+    use std::io::{Read, Write};
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::process::CommandExt;
+    let mode = std::env::args_os().nth(1).unwrap_or_default();
+    match mode.to_str() {
+        Some("--linux-invalid-argv" | "--linux-invalid-env") => {
+            let mut command = Command::new(std::env::current_exe().unwrap());
+            command.arg("--linux-target");
+            if mode == "--linux-invalid-argv" {
+                command.arg(std::ffi::OsStr::from_bytes(b"invalid-\xff"));
+            } else {
+                command.env("PROC_SAFE_INVALID", std::ffi::OsStr::from_bytes(b"\xff"));
+            }
+            panic!("fixture exec failed: {}", command.exec());
+        }
+        Some("--linux-denied" | "--linux-target") => {
+            if mode == "--linux-denied" {
+                assert_eq!(unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0) }, 0);
+            }
+            println!("{}", std::process::id());
+            std::io::stdout().flush().unwrap();
+            std::thread::sleep(std::time::Duration::from_secs(60));
+            true
+        }
+        Some("--linux-zombie") => {
+            let pid = unsafe { libc::fork() };
+            assert!(pid >= 0);
+            if pid == 0 {
+                unsafe { libc::_exit(0) };
+            }
+            let mut info = unsafe { std::mem::zeroed::<libc::siginfo_t>() };
+            assert_eq!(
+                unsafe {
+                    libc::waitid(
+                        libc::P_PID,
+                        pid as u32,
+                        &mut info,
+                        libc::WEXITED | libc::WNOWAIT,
+                    )
+                },
+                0
+            );
+            println!("{pid}");
+            std::io::stdout().flush().unwrap();
+            std::io::stdin().read_exact(&mut [0]).unwrap();
+            assert_eq!(unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) }, pid);
+            true
+        }
+        _ => false,
+    }
 }
 
 #[cfg(target_os = "macos")]

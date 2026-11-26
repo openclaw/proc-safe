@@ -41,7 +41,7 @@ async function probe(version, target) {
   const expected = {
     "./identity": true,
     "./darwin": process.platform === "darwin",
-    "./inspect": ["darwin", "win32"].includes(process.platform) && !translated,
+    "./inspect": ["darwin", "linux", "win32"].includes(process.platform) && !translated,
     "./windows-job": process.platform === "win32",
     "./windows-token": process.platform === "win32",
     "./reaper": process.platform === "linux",
@@ -88,7 +88,7 @@ async function probe(version, target) {
     const coalition = modules["./darwin"].readProcessCoalition(process.pid);
     assert.ok(coalition && typeof coalition.id === "bigint" && coalition.id > 0n);
   }
-  if (["darwin", "win32"].includes(process.platform)) {
+  if (["darwin", "linux", "win32"].includes(process.platform)) {
     if (translated) {
       assert.throws(() => modules["./inspect"].readProcessCommand(process.pid), { code: "unsupported-platform" });
     } else {
@@ -96,8 +96,12 @@ async function probe(version, target) {
       assert.ok(command?.executable && command.argv.length > 0);
       assert.deepEqual(command.environment, {});
     }
-    const rows = modules["./inspect"].listProcesses({ timeoutMs: 5000 });
-    assert.ok(rows.some(row => row.pid === process.pid && row.parentPid === identity.parentPid && row.owner === "same"));
+    if (process.platform === "linux") {
+      assert.throws(() => modules["./inspect"].listProcesses({ timeoutMs: 5000 }), { code: "unsupported-platform" });
+    } else {
+      const rows = modules["./inspect"].listProcesses({ timeoutMs: 5000 });
+      assert.ok(rows.some(row => row.pid === process.pid && row.parentPid === identity.parentPid && row.owner === "same"));
+    }
   }
   if (process.platform === "win32") {
     assert.equal(modules["./windows-token"].readCurrentAppContainerSid(), null);

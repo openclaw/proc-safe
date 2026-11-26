@@ -29,6 +29,7 @@ function observe(pid, expected) {
   assert.equal(Object.isFrozen(command.argv), true);
   assert.equal(Object.isFrozen(command.environment), true);
   assert.deepEqual(readProcessCommand(pid).environment, {});
+  assert.deepEqual(readProcessCommand(pid, { environmentKeys: [...keys, ...keys] }).environment, command.environment);
   if (process.platform === "win32") {
     assert.equal(resolve(command.cwd).toLowerCase(), resolve(expected.cwd).toLowerCase());
     assert.equal(typeof command.commandLine, "string");
@@ -187,14 +188,50 @@ async function suspendedProof() {
   assert.deepEqual([...outcomes].sort(), ["read", "refused"]);
 }
 
+function observeLinuxFailure(pid, mode) {
+  if (mode === "--linux-invalid-env") {
+    assert.ok(readProcessCommand(pid).argv.length > 0);
+    assert.deepEqual(readProcessCommand(pid, { environmentKeys: ["PROC_SAFE_MISSING"] }).environment, {});
+    assert.throws(() => readProcessCommand(pid, { environmentKeys: ["PROC_SAFE_INVALID"] }), { code: "layout-mismatch" });
+  } else {
+    const code = mode === "--linux-denied" ? "access-denied" : mode === "--linux-zombie" ? "incomplete" : "layout-mismatch";
+    assert.throws(() => readProcessCommand(pid), { code });
+  }
+}
+
+async function linuxFailureProof(mode) {
+  const fixture = fileURLToPath(new URL(`../target/${hostNativeTarget().rust}/release/proc-safe-inspect-fixture`, import.meta.url));
+  const child = spawn(fixture, [mode], { stdio: ["pipe", "pipe", "inherit"] });
+  const closed = once(child, "close");
+  let pid;
+  try {
+    const [ready] = await once(child.stdout, "data");
+    pid = Number(String(ready).trim());
+    assert.ok(Number.isInteger(pid) && pid > 0);
+    observeLinuxFailure(pid, mode);
+    const worker = new Worker(new URL(import.meta.url), { workerData: { pid, linuxFailure: mode } });
+    const exited = once(worker, "exit");
+    assert.deepEqual(await once(worker, "message"), ["verified"]);
+    assert.deepEqual(await exited, [0]);
+  } finally {
+    if (mode === "--linux-zombie") child.stdin.end("x");
+    else child.kill("SIGKILL");
+    await closed;
+  }
+  if (pid) assert.equal(readProcessCommand(pid), null);
+}
+
 export async function proveInspection() {
-  if (!["darwin", "win32"].includes(process.platform)) {
+  if (!["darwin", "linux", "win32"].includes(process.platform)) {
     assert.equal(isSupported(), false);
     assert.throws(() => readProcessCommand(process.pid), error => error.code === "unsupported-platform");
     assert.throws(() => listProcesses({ timeoutMs: 1000 }), error => error.code === "unsupported-platform");
     return { platform: process.platform, arch: process.arch, passed: 1 };
   }
   assert.equal(isSupported(), true);
+  if (process.platform === "linux") {
+    assert.throws(() => listProcesses({ timeoutMs: 1000 }), { code: "unsupported-platform" });
+  }
   if (process.platform === "win32") {
     proveCensusOptions();
     const worker = new Worker(new URL(import.meta.url), { workerData: { censusOptions: true } });
@@ -203,9 +240,15 @@ export async function proveInspection() {
     assert.deepEqual(await exited, [0]);
   }
   const cwd = mkdtempSync(join(tmpdir(), "proc-safe-command-"));
-  const args = ["spaces stay together", "", 'quote"inside', "trailing\\", "é🦞", "a=b"];
+  const args = ["spaces stay together", "", 'quote"inside', "trailing\\", "é🦞", "a=b", ""];
   try {
     await childProof(process.execPath, ["-e", "console.log(process.pid); setInterval(() => {}, 1000)", "--"], args, cwd);
+    if (process.platform === "linux") {
+      await childProof(process.execPath, ["-e", "console.log(process.pid); setInterval(() => {}, 1000)", "--"], args, cwd, true);
+      for (const mode of ["--linux-denied", "--linux-zombie", "--linux-invalid-argv", "--linux-invalid-env"]) {
+        await linuxFailureProof(mode);
+      }
+    }
     if (process.platform === "darwin") {
       await childProof(process.execPath, ["-e", "console.log(process.pid); setInterval(() => {}, 1000)", "--"], args, cwd, true);
       await suspendedProof();
@@ -216,11 +259,12 @@ export async function proveInspection() {
       await childProof(executable, [], args, cwd);
     }
   } finally { rmSync(cwd, { recursive: true, force: true }); }
-  return { platform: process.platform, arch: process.arch, passed: process.platform === "darwin" ? 7 : 5 };
+  return { platform: process.platform, arch: process.arch, passed: process.platform === "darwin" ? 7 : process.platform === "linux" ? 13 : 5 };
 }
 
 if (!isMainThread) {
-  if (workerData.censusOptions) { proveCensusOptions(); parentPort.postMessage("verified"); }
+  if (workerData.linuxFailure) { observeLinuxFailure(workerData.pid, workerData.linuxFailure); parentPort.postMessage("verified"); }
+  else if (workerData.censusOptions) { proveCensusOptions(); parentPort.postMessage("verified"); }
   else if (workerData.largeArguments) { observeLargeArguments(workerData.pid); parentPort.postMessage("verified"); }
   else if (workerData.suspended) parentPort.postMessage(observeSuspended(workerData.pid));
   else {
