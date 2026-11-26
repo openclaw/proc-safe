@@ -293,5 +293,32 @@ mod tests {
         assert_eq!(command.executable, "/original (deleted)");
         // No environ file exists: an empty selection must not open it.
         assert!(command.environment.is_empty());
+        std::fs::remove_file(root.join("retained/exe")).unwrap();
+        use std::os::unix::ffi::OsStrExt;
+        symlink(
+            std::ffi::OsStr::from_bytes(b"/invalid-\xff"),
+            root.join("retained/exe"),
+        )
+        .unwrap();
+        assert!(
+            executable(&directory)
+                .unwrap_err()
+                .reason
+                .starts_with("layout-mismatch:")
+        );
+    }
+
+    #[test]
+    fn retained_proc_directory_cannot_read_a_reaped_child() {
+        let mut child = std::process::Command::new("/bin/sleep")
+            .arg("60")
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        let directory = File::open(format!("/proc/{pid}")).unwrap();
+        child.kill().unwrap();
+        child.wait().unwrap();
+        assert!(open_at(&directory, c"stat").is_err());
+        assert!(observe(&directory, pid, &[]).is_err());
     }
 }

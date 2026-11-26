@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -193,10 +193,22 @@ function observeLinuxFailure(pid, mode) {
     assert.ok(readProcessCommand(pid).argv.length > 0);
     assert.deepEqual(readProcessCommand(pid, { environmentKeys: ["PROC_SAFE_MISSING"] }).environment, {});
     assert.throws(() => readProcessCommand(pid, { environmentKeys: ["PROC_SAFE_INVALID"] }), { code: "layout-mismatch" });
+  } else if (mode === "--linux-denied") {
+    let command;
+    try { command = readProcessCommand(pid); }
+    catch (error) { assert.equal(error.code, "access-denied"); return "verified"; }
+    // A privileged observer may inspect a nondumpable process. Report that
+    // outcome separately; successful inspection is not evidence of denial.
+    const mask = /^CapEff:\s*([0-9a-f]+)$/mi.exec(readFileSync("/proc/self/status", "utf8"));
+    assert.ok(mask && (BigInt(`0x${mask[1]}`) & (1n << 19n)) !== 0n, "unexpected nondumpable access without CAP_SYS_PTRACE");
+    assert.ok(command.argv.includes("--linux-denied"));
+    assert.deepEqual(command.environment, {});
+    return "allowed-cap-sys-ptrace";
   } else {
-    const code = mode === "--linux-denied" ? "access-denied" : mode === "--linux-zombie" ? "incomplete" : "layout-mismatch";
+    const code = mode === "--linux-zombie" ? "incomplete" : "layout-mismatch";
     assert.throws(() => readProcessCommand(pid), { code });
   }
+  return "verified";
 }
 
 async function linuxFailureProof(mode) {
@@ -204,14 +216,15 @@ async function linuxFailureProof(mode) {
   const child = spawn(fixture, [mode], { stdio: ["pipe", "pipe", "inherit"] });
   const closed = once(child, "close");
   let pid;
+  let outcome;
   try {
     const [ready] = await once(child.stdout, "data");
     pid = Number(String(ready).trim());
     assert.ok(Number.isInteger(pid) && pid > 0);
-    observeLinuxFailure(pid, mode);
+    outcome = observeLinuxFailure(pid, mode);
     const worker = new Worker(new URL(import.meta.url), { workerData: { pid, linuxFailure: mode } });
     const exited = once(worker, "exit");
-    assert.deepEqual(await once(worker, "message"), ["verified"]);
+    assert.deepEqual(await once(worker, "message"), [outcome]);
     assert.deepEqual(await exited, [0]);
   } finally {
     if (mode === "--linux-zombie") child.stdin.end("x");
@@ -219,6 +232,7 @@ async function linuxFailureProof(mode) {
     await closed;
   }
   if (pid) assert.equal(readProcessCommand(pid), null);
+  return outcome;
 }
 
 export async function proveInspection() {
@@ -229,6 +243,7 @@ export async function proveInspection() {
     return { platform: process.platform, arch: process.arch, passed: 1 };
   }
   assert.equal(isSupported(), true);
+  let linuxDenial;
   if (process.platform === "linux") {
     assert.throws(() => listProcesses({ timeoutMs: 1000 }), { code: "unsupported-platform" });
   }
@@ -246,7 +261,8 @@ export async function proveInspection() {
     if (process.platform === "linux") {
       await childProof(process.execPath, ["-e", "console.log(process.pid); setInterval(() => {}, 1000)", "--"], args, cwd, true);
       for (const mode of ["--linux-denied", "--linux-zombie", "--linux-invalid-argv", "--linux-invalid-env"]) {
-        await linuxFailureProof(mode);
+        const outcome = await linuxFailureProof(mode);
+        if (mode === "--linux-denied") linuxDenial = outcome;
       }
     }
     if (process.platform === "darwin") {
@@ -259,11 +275,12 @@ export async function proveInspection() {
       await childProof(executable, [], args, cwd);
     }
   } finally { rmSync(cwd, { recursive: true, force: true }); }
-  return { platform: process.platform, arch: process.arch, passed: process.platform === "darwin" ? 7 : process.platform === "linux" ? 13 : 5 };
+  return { platform: process.platform, arch: process.arch, passed: process.platform === "darwin" ? 7 : process.platform === "linux" ? 13 : 5,
+    ...(process.platform === "linux" ? { denial: linuxDenial } : {}) };
 }
 
 if (!isMainThread) {
-  if (workerData.linuxFailure) { observeLinuxFailure(workerData.pid, workerData.linuxFailure); parentPort.postMessage("verified"); }
+  if (workerData.linuxFailure) parentPort.postMessage(observeLinuxFailure(workerData.pid, workerData.linuxFailure));
   else if (workerData.censusOptions) { proveCensusOptions(); parentPort.postMessage("verified"); }
   else if (workerData.largeArguments) { observeLargeArguments(workerData.pid); parentPort.postMessage("verified"); }
   else if (workerData.suspended) parentPort.postMessage(observeSuspended(workerData.pid));
