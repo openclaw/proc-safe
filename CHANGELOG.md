@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.8.1 - 2026-11-28
+
+**Highlights:** Complete macOS x64 release-consumer validation.
+
+- Verify the pinned x64 Bun runtime before the timed installed-package checks on macOS. Package APIs and the 30-second behavioral limit are unchanged.
+
 ## 0.8.0 - 2026-11-27
 
 **Highlights:** Add Linux process command inspection.
