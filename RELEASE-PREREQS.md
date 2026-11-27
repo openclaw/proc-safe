@@ -53,6 +53,11 @@ ancestry walk, self command inspection, Darwin coalition, Windows census and pro
 Linux wait-state and temporary-file residency, plus every capability's `isSupported()`.
 Systemd is probed only with `isSupported()`; no service connection or process mutation is made.
 
+The macOS x64 consumer uses the pinned Bun setup action with an explicit x64 archive
+and cache disabled. The action verifies the runtime before the package probe; setup
+has a separate two-minute ceiling. The package probe retains its 30-second behavioral
+limit. Cold runtime startup remains a separate diagnostic below, not a package gate.
+
 Run the same public-registry smoke locally with `node scripts/installed-smoke.mjs X.Y.Z --bun`
 (omit `--bun` for Node only). Installation uses an isolated cache and empty npm configuration.
 Only installation retries: five attempts, with 5/10/20/40-second backoff, a 30-second fetch
@@ -60,6 +65,34 @@ timeout and a 120-second ceiling per attempt. A successful install's behavioral 
 terminal. Failure leaves the GitHub Release draft intact and never deletes or republishes a
 package. Re-run the failed gate after investigation; publication retries still verify existing
 versions rather than republish them.
+
+For a cold macOS x64 Bun failure, manually run `ci.yml` with `consumer_diagnostic=true`
+and `consumer_version` set to the exact published version. This read-only consumer job
+skips builds and ordinary CI jobs, keeps the release runtime versions and 30-second
+behavioral limit, and by default never executes Bun before the probe. It records the resolved
+Bun executable's hash and enables synchronous phase markers with
+`PROC_SAFE_SMOKE_TRACE=1`. Markers contain phase, runtime, architecture, thread and
+elapsed time; the first marker follows static module initialization. Select `startup_launch=arch` only for a separate comparison of
+an explicit `/usr/bin/arch -x86_64` launcher; the default remains a direct Bun launch.
+Neither startup variant replaces a package smoke check.
+If both launch routes stall, `startup_observe=true` with direct startup uses an
+asynchronous child solely to expose its owned PID. It takes at most one bounded
+stack sample at ten seconds, keeps the 30-second deadline, and allows one second
+for termination before killing only that child. The log omits sample headers and
+binary-image paths. This changes the launch API and may perturb timing; its result
+is observation evidence, not equivalent to the synchronous baseline.
+To separately qualify the standard installer, use `consumer_installer=setup-bun`
+and package mode. The pinned setup action downloads the same x64 binary with its
+cache disabled and verifies its revision before the unchanged 30-second package
+smoke. Its installation step is bounded to two minutes. This is an explicitly
+installer-qualified test, not a cold-start comparison or release-promotion gate.
+The diagnostic does not publish packages, promote a release or replace the original
+consumer gate.
+If no Bun entry marker appears, select `consumer_probe=startup` for a separate cold
+run of import-free JavaScript under the same executable, environment filtering and
+30-second limit. This probe skips package installation and cannot establish package
+compatibility; it probes runtime startup and exit without package imports or file-based
+module initialization.
 
 Native CI also runs this smoke against its local root and platform tarballs on every target:
 `node scripts/installed-smoke.mjs X.Y.Z --bun --tarballs root.tgz platform.tgz`.

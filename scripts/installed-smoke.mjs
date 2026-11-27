@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { once } from "node:events";
-import { closeSync, copyFileSync, mkdtempSync, openSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, copyFileSync, mkdtempSync, openSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -11,8 +11,19 @@ import { setTimeout as delay } from "node:timers/promises";
 import { assertDefaultAncestry } from "./ancestry-proof-assertions.mjs";
 
 const packageName = "@openclaw/proc-safe";
+const traceEnabled = process.env.PROC_SAFE_SMOKE_TRACE === "1";
+const traceStart = process.hrtime.bigint();
+function trace(phase) {
+  if (!traceEnabled) return;
+  writeSync(2, JSON.stringify({ diagnostic: "installed-smoke", phase,
+    runtime: process.versions.bun ? "bun" : "node", arch: process.arch,
+    thread: isMainThread ? "main" : "worker",
+    elapsedMs: Number(process.hrtime.bigint() - traceStart) / 1e6 }) + "\n");
+}
+trace("module:entry");
 
 async function probe(version, target) {
+  trace("package:start");
   const require = createRequire(import.meta.url);
   const pkg = require(`${packageName}/package.json`);
   assert.equal(pkg.version, version);
@@ -24,20 +35,27 @@ async function probe(version, target) {
   }
   assert.ok(Object.hasOwn(pkg.optionalDependencies, target), "expected native package is declared");
 
+  trace("package:end");
   const modules = {};
   for (const subpath of Object.keys(pkg.exports)) {
     if (subpath === "./package.json") continue; // Already read above; JSON imports need runtime-specific attributes.
     const name = subpath === "." ? packageName : packageName + subpath.slice(1);
+    trace(`import:${subpath}:start`);
     modules[subpath] = await import(name);
+    trace(`import:${subpath}:end`);
   }
   assert.equal(modules["."].ProcSafeError, modules["./errors"].ProcSafeError);
+  trace("native-status:start");
   const native = await modules["."].getProcSafeNativeStatus({ probe: true });
+  trace("native-status:end");
   assert.equal(native.reason, "loaded");
   assert.equal(native.loaded, true);
   assert.equal(native.packageName, target);
   assert.equal(native.packageVersion, version);
+  trace("translation:start");
   const translated = process.platform === "darwin" && process.arch === "x64" &&
     execFileSync("/usr/sbin/sysctl", ["-in", "sysctl.proc_translated"], { encoding: "utf8" }).trim() === "1";
+  trace("translation:end");
   const expected = {
     "./identity": true,
     "./darwin": process.platform === "darwin",
@@ -50,6 +68,7 @@ async function probe(version, target) {
   };
   for (const [subpath, module] of Object.entries(modules)) {
     if ([".", "./errors"].includes(subpath)) continue;
+    trace(`capability:${subpath}:start`);
     if (subpath === "./filesystem-launch") {
       assert.equal(typeof module.prepareFilesystemRestrictedLaunch, "function");
       const options = {
@@ -65,6 +84,7 @@ async function probe(version, target) {
       } else {
         assert.throws(() => module.prepareFilesystemRestrictedLaunch(options), { code: "unsupported-platform" });
       }
+      trace(`capability:${subpath}:end`);
       continue;
     }
     assert.equal(typeof module.isSupported, "function", `${subpath}.isSupported`);
@@ -75,31 +95,44 @@ async function probe(version, target) {
     } else {
       assert.equal(supported, expected[subpath], `${subpath}.isSupported`);
     }
+    trace(`capability:${subpath}:end`);
   }
 
+  trace("identity:start");
   const identity = modules["./identity"].readProcessIdentity(process.pid);
+  trace("identity:end");
   assert.equal(identity?.pid, process.pid);
   assert.equal(identity.exited, false);
   assert.ok(Number.isSafeInteger(identity.startTimeMicros) && identity.startTimeMicros > 0);
   // Intentionally omit options: the first published release failed walking to launchd.
+  trace("ancestry:start");
   const ancestry = modules["./identity"].readProcessAncestry(process.pid);
+  trace("ancestry:end");
   assertDefaultAncestry(ancestry, process.pid);
   if (process.platform === "darwin") {
+    trace("coalition:start");
     const coalition = modules["./darwin"].readProcessCoalition(process.pid);
+    trace("coalition:end");
     assert.ok(coalition && typeof coalition.id === "bigint" && coalition.id > 0n);
   }
   if (["darwin", "linux", "win32"].includes(process.platform)) {
     if (translated) {
+      trace("command-refusal:start");
       assert.throws(() => modules["./inspect"].readProcessCommand(process.pid), { code: "unsupported-platform" });
+      trace("command-refusal:end");
     } else {
+      trace("command:start");
       const command = modules["./inspect"].readProcessCommand(process.pid);
+      trace("command:end");
       assert.ok(command?.executable && command.argv.length > 0);
       assert.deepEqual(command.environment, {});
     }
     if (process.platform === "linux") {
       assert.throws(() => modules["./inspect"].listProcesses({ timeoutMs: 5000 }), { code: "unsupported-platform" });
     } else {
+      trace("census:start");
       const rows = modules["./inspect"].listProcesses({ timeoutMs: 5000 });
+      trace("census:end");
       assert.ok(rows.some(row => row.pid === process.pid && row.parentPid === identity.parentPid && row.owner === "same"));
     }
   }
@@ -132,6 +165,7 @@ async function probe(version, target) {
       rmSync(directory, { recursive: true, force: true });
     }
   }
+  trace("probe:complete");
   console.log(JSON.stringify({ runtime: process.versions.bun ? "bun" : "node", platform: process.platform,
     arch: process.arch, thread: isMainThread ? "main" : "worker", version, target,
     imports: Object.keys(pkg.exports).length, ancestryDepth: ancestry.chain.length,
@@ -140,15 +174,22 @@ async function probe(version, target) {
 
 if (!isMainThread) {
   await probe(workerData.version, workerData.target);
+  trace("worker-message:send");
   parentPort.postMessage("passed");
 } else if (process.argv[2] === "--probe") {
   const [version, target] = process.argv.slice(3);
   await probe(version, target);
+  trace("worker:create:start");
   const worker = new Worker(new URL(import.meta.url), { workerData: { version, target } });
+  trace("worker:create:end");
   const exit = once(worker, "exit");
+  trace("worker-message:wait");
   const [message] = await once(worker, "message");
+  trace("worker-message:received");
   assert.equal(message, "passed");
+  trace("worker-exit:wait");
   assert.deepEqual(await exit, [0]);
+  trace("worker-exit:received");
 } else {
   const { runNpm } = await import("./npm-cli.mjs");
   const [version, ...args] = process.argv.slice(2);
@@ -202,7 +243,10 @@ if (!isMainThread) {
     }
     // Behavioral failures are terminal: only registry installation is retried.
     for (const runtime of [process.execPath, ...(withBun ? ["bun"] : [])]) {
+      const childRuntime = runtime === process.execPath ? "node" : "bun";
+      trace(`child:${childRuntime}:start`);
       execFileSync(runtime, [script, "--probe", version, target], { cwd: directory, env, stdio: "inherit", timeout: 30000 });
+      trace(`child:${childRuntime}:end`);
       if (breakawayProof) {
         console.log(`Installed Windows breakaway proof (${runtime === process.execPath ? "Node" : "Bun"}, ${target})`);
         execFileSync(runtime, [breakawayProof], { cwd: directory, env, stdio: "inherit", timeout: 60000 });
