@@ -69,6 +69,11 @@ Bun executable's hash and enables synchronous phase markers with
 `PROC_SAFE_SMOKE_TRACE=1`. Markers contain phase, runtime, architecture, thread and
 elapsed time; the first marker follows static module initialization. The diagnostic
 does not publish packages, promote a release or replace the original consumer gate.
+If no Bun entry marker appears, select `consumer_probe=startup` for a separate cold
+run of import-free JavaScript under the same executable, environment filtering and
+30-second limit. This probe skips package installation and cannot establish package
+compatibility; it probes runtime startup and exit without package imports or file-based
+module initialization.
 
 Native CI also runs this smoke against its local root and platform tarballs on every target:
 `node scripts/installed-smoke.mjs X.Y.Z --bun --tarballs root.tgz platform.tgz`.

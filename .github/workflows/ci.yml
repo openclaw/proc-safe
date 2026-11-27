@@ -13,6 +13,11 @@ on:
         description: Exact published proc-safe version to diagnose
         type: string
         default: '0.8.0'
+      consumer_probe:
+        description: Package smoke or import-free runtime startup
+        type: choice
+        default: package
+        options: [package, startup]
 permissions:
   contents: read
 concurrency:
@@ -101,9 +106,39 @@ jobs:
           assert.ok(binary, 'Bun executable must resolve on PATH');
           const expected = realpathSync(join(process.env.RUNNER_TEMP, 'bun-x64/bun-darwin-x64/bun'));
           assert.equal(realpathSync(binary), expected, 'expected pinned Bun executable');
-          console.log(JSON.stringify({ executable: 'bun-darwin-x64', sha256: createHash('sha256').update(readFileSync(binary)).digest('hex') }));
+          const sha256 = createHash('sha256').update(readFileSync(binary)).digest('hex');
+          assert.equal(sha256, 'c35307c7d45d65c5a385a58c4a6cb0bb9499e4e626abdee207c177a77ba666ab', 'same Bun 1.4.4 bytes as the package diagnostic');
+          console.log(JSON.stringify({ executable: 'bun-darwin-x64', sha256 }));
+          NODE
+      - name: Check cold Bun startup without package imports
+        if: inputs.consumer_probe == 'startup'
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+          import { tmpdir } from 'node:os';
+          import { join } from 'node:path';
+          const directory = mkdtempSync(join(tmpdir(), 'proc-safe-startup-'));
+          const env = { ...process.env };
+          for (const key of Object.keys(env)) {
+            if (/^npm_config_/i.test(key) || ['NODE_PATH', 'NODE_OPTIONS', 'PROC_SAFE_NATIVE', 'NPM_TOKEN', 'NODE_AUTH_TOKEN'].includes(key)) delete env[key];
+          }
+          env.npm_config_userconfig = join(directory, 'empty-npmrc');
+          env.npm_config_globalconfig = join(directory, 'empty-global-npmrc');
+          env.npm_config_cache = join(directory, 'cache');
+          try {
+            writeFileSync(env.npm_config_userconfig, '');
+            writeFileSync(env.npm_config_globalconfig, '');
+            writeFileSync(join(directory, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
+            execFileSync('bun', ['--eval', `
+              console.log(JSON.stringify({ phase: 'startup-entry', runtime: process.versions.bun, arch: process.arch }));
+              if (process.versions.bun !== '1.4.4' || process.arch !== 'x64') throw new Error('unexpected Bun runtime');
+            `], { cwd: directory, env, stdio: 'inherit', timeout: 30000 });
+          } finally { rmSync(directory, { recursive: true, force: true }); }
           NODE
       - name: Trace fresh public-registry install and default calls
+        if: inputs.consumer_probe != 'startup'
         env:
           PROC_SAFE_SMOKE_TRACE: '1'
           CONSUMER_VERSION: ${{ inputs.consumer_version }}
