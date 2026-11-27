@@ -61,6 +61,15 @@ terminal. Failure leaves the GitHub Release draft intact and never deletes or re
 package. Re-run the failed gate after investigation; publication retries still verify existing
 versions rather than republish them.
 
+For a cold macOS x64 Bun failure, manually run `ci.yml` with `consumer_diagnostic=true`
+and `consumer_version` set to the exact published version. This read-only consumer job
+skips builds and ordinary CI jobs, keeps the release runtime versions and 30-second
+behavioral limit, and never executes Bun before the probe. It records the resolved
+Bun executable's hash and enables synchronous phase markers with
+`PROC_SAFE_SMOKE_TRACE=1`. Markers contain phase, runtime, architecture, thread and
+elapsed time; the first marker follows static module initialization. The diagnostic
+does not publish packages, promote a release or replace the original consumer gate.
+
 Native CI also runs this smoke against its local root and platform tarballs on every target:
 `node scripts/installed-smoke.mjs X.Y.Z --bun --tarballs root.tgz platform.tgz`.
 FreeBSD uses Node only, as in the existing runtime proof. Local tarballs install once, with no

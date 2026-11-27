@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      consumer_diagnostic:
+        description: Run only the cold x64 Bun public-package diagnostic
+        type: boolean
+        default: false
+      consumer_version:
+        description: Exact published proc-safe version to diagnose
+        type: string
+        default: '0.8.0'
 permissions:
   contents: read
 concurrency:
@@ -11,6 +20,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   lint-workflows:
+    if: ${{ !inputs.consumer_diagnostic }}
     name: Lint workflows
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -18,6 +28,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca
   typescript:
+    if: ${{ !inputs.consumer_diagnostic }}
     name: TypeScript checks (Node ${{ matrix.node-major }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -38,6 +49,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
   cargo-quality:
+    if: ${{ !inputs.consumer_diagnostic }}
     name: Cargo clippy and audit
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -49,4 +61,50 @@ jobs:
       - run: cargo install cargo-audit --version 0.22.2 --locked
       - run: cargo audit --deny warnings
   native:
+    if: ${{ !inputs.consumer_diagnostic }}
     uses: ./.github/workflows/native.yml
+  consumer-diagnostic:
+    name: Cold published consumer (macOS x64)
+    if: github.event_name == 'workflow_dispatch' && inputs.consumer_diagnostic
+    runs-on: xcode-27
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Prepare Rosetta for x64 consumers
+        run: |
+          if ! arch -x86_64 /usr/bin/true; then
+            sudo softwareupdate --install-rosetta --agree-to-license
+          fi
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.22.1
+          architecture: x64
+      - name: Install x64 Bun without warming it
+        run: |
+          curl --fail --location --retry 3 --retry-delay 2 --retry-max-time 300 --connect-timeout 15 --max-time 120 "https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-darwin-x64.zip" -o "$RUNNER_TEMP/bun-x64.zip"
+          unzip -q "$RUNNER_TEMP/bun-x64.zip" -d "$RUNNER_TEMP/bun-x64"
+          echo "$RUNNER_TEMP/bun-x64/bun-darwin-x64" >> "$GITHUB_PATH"
+      - name: Verify Node architecture and identify the cold Bun executable
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { accessSync, constants, readFileSync, realpathSync } from 'node:fs';
+          import { delimiter, join } from 'node:path';
+          assert.equal(process.arch, 'x64');
+          const binary = process.env.PATH.split(delimiter).map(dir => join(dir, 'bun')).find(path => {
+            try { accessSync(path, constants.X_OK); return true; } catch { return false; }
+          });
+          assert.ok(binary, 'Bun executable must resolve on PATH');
+          const expected = realpathSync(join(process.env.RUNNER_TEMP, 'bun-x64/bun-darwin-x64/bun'));
+          assert.equal(realpathSync(binary), expected, 'expected pinned Bun executable');
+          console.log(JSON.stringify({ executable: 'bun-darwin-x64', sha256: createHash('sha256').update(readFileSync(binary)).digest('hex') }));
+          NODE
+      - name: Trace fresh public-registry install and default calls
+        env:
+          PROC_SAFE_SMOKE_TRACE: '1'
+          CONSUMER_VERSION: ${{ inputs.consumer_version }}
+        run: node scripts/installed-smoke.mjs "$CONSUMER_VERSION" --bun
