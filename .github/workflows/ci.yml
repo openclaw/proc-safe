@@ -18,6 +18,11 @@ on:
         type: choice
         default: package
         options: [package, startup]
+      startup_launch:
+        description: Direct Bun launch or explicit x64 arch launcher
+        type: choice
+        default: direct
+        options: [direct, arch]
 permissions:
   contents: read
 concurrency:
@@ -113,6 +118,8 @@ jobs:
       - name: Check cold Bun startup without package imports
         if: inputs.consumer_probe == 'startup'
         shell: bash
+        env:
+          STARTUP_LAUNCH: ${{ inputs.startup_launch }}
         run: |
           node --input-type=module <<'NODE'
           import { execFileSync } from 'node:child_process';
@@ -131,10 +138,14 @@ jobs:
             writeFileSync(env.npm_config_userconfig, '');
             writeFileSync(env.npm_config_globalconfig, '');
             writeFileSync(join(directory, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
-            execFileSync('bun', ['--eval', `
+            const args = ['--eval', `
               console.log(JSON.stringify({ phase: 'startup-entry', runtime: process.versions.bun, arch: process.arch }));
               if (process.versions.bun !== '1.4.4' || process.arch !== 'x64') throw new Error('unexpected Bun runtime');
-            `], { cwd: directory, env, stdio: 'inherit', timeout: 30000 });
+            `];
+            const withArch = process.env.STARTUP_LAUNCH === 'arch';
+            delete env.STARTUP_LAUNCH;
+            execFileSync(withArch ? '/usr/bin/arch' : 'bun', withArch ? ['-x86_64', 'bun', ...args] : args,
+              { cwd: directory, env, stdio: 'inherit', timeout: 30000 });
           } finally { rmSync(directory, { recursive: true, force: true }); }
           NODE
       - name: Trace fresh public-registry install and default calls

@@ -67,7 +67,9 @@ skips builds and ordinary CI jobs, keeps the release runtime versions and 30-sec
 behavioral limit, and never executes Bun before the probe. It records the resolved
 Bun executable's hash and enables synchronous phase markers with
 `PROC_SAFE_SMOKE_TRACE=1`. Markers contain phase, runtime, architecture, thread and
-elapsed time; the first marker follows static module initialization. The diagnostic
+elapsed time; the first marker follows static module initialization. Select `startup_launch=arch` only for a separate comparison of
+an explicit `/usr/bin/arch -x86_64` launcher; the default remains a direct Bun launch.
+Neither startup variant replaces a package smoke check. The diagnostic
 does not publish packages, promote a release or replace the original consumer gate.
 If no Bun entry marker appears, select `consumer_probe=startup` for a separate cold
 run of import-free JavaScript under the same executable, environment filtering and
