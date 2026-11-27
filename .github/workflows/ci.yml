@@ -157,7 +157,7 @@ jobs:
                 cwd: directory, env, sample: pid => sampleStartup(pid, directory),
               });
               console.log(JSON.stringify({ diagnostic: 'startup-observation', ...result }));
-              if (result.timedOut || result.code !== 0) throw new Error('observed startup failed');
+              if (result.timedOut || result.code !== 0 || result.processErrors.length) throw new Error('observed startup failed');
             } else {
               execFileSync(withArch ? '/usr/bin/arch' : 'bun', withArch ? ['-x86_64', 'bun', ...args] : args,
                 { cwd: directory, env, stdio: 'inherit', timeout: 30000 });

@@ -5,17 +5,26 @@ import { join } from "node:path";
 // Only the caller's tracked child is sampled or signalled. A timeout stays a failure.
 export async function observeStartup(command, args, {
   cwd, env, sample, timeoutMs = 30000, sampleDelayMs = 10000, killGraceMs = 1000,
+  spawnChild = spawn,
 }) {
   const started = performance.now();
-  const child = spawn(command, args, { cwd, env, stdio: "inherit" });
+  const child = spawnChild(command, args, { cwd, env, stdio: "inherit" });
+  let spawned = false;
   let exited = false;
   let timedOut = false;
+  const processErrors = [];
   let killTimer;
   let observation = Promise.resolve({ status: "not-sampled" });
   const completion = new Promise(resolve => {
-    child.once("error", error => {
-      exited = true;
-      resolve({ code: null, signal: null, spawnError: String(error.code ?? "unknown") });
+    child.once("spawn", () => { spawned = true; });
+    child.on("error", error => {
+      const code = String(error.code ?? "unknown");
+      if (spawned) {
+        processErrors.push(code);
+      } else {
+        exited = true;
+        resolve({ code: null, signal: null, spawnError: code });
+      }
     });
     child.once("exit", (code, signal) => {
       exited = true;
@@ -39,7 +48,7 @@ export async function observeStartup(command, args, {
   clearTimeout(sampleTimer);
   clearTimeout(deadline);
   clearTimeout(killTimer);
-  return { ...result, timedOut, elapsedMs, sample: await observation };
+  return { ...result, timedOut, processErrors, elapsedMs, sample: await observation };
 }
 
 export async function sampleStartup(pid, directory) {
@@ -64,5 +73,6 @@ export function formatCallGraph(text) {
   if (start < 0) return null;
   const graph = text.slice(start + "Call graph:".length).split(/\n(?:Binary Images:|Total number in stack)/)[0];
   const lines = graph.split("\n").slice(0, 160);
-  return lines.join("\n").replace(/(?:[A-Za-z]:[\\/]|\/)[^\s)]+/g, "<path>").slice(0, 32768);
+  return lines.map(line => /[\\/]/.test(line)
+    ? `${line.match(/^\s*/)[0]}<path-bearing frame omitted>` : line).join("\n").slice(0, 32768);
 }
