@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.8.0 - 2026-11-27
+
+**Highlights:** Add Linux process command inspection.
+
 - Add Linux command inspection with exact argument boundaries, explicitly selected environment values, bounded procfs reads, and process-instance-safe observations. Linux process census remains unsupported.
 
 ## 0.7.0 - 2026-11-24
