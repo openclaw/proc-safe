@@ -64,7 +64,7 @@ versions rather than republish them.
 For a cold macOS x64 Bun failure, manually run `ci.yml` with `consumer_diagnostic=true`
 and `consumer_version` set to the exact published version. This read-only consumer job
 skips builds and ordinary CI jobs, keeps the release runtime versions and 30-second
-behavioral limit, and never executes Bun before the probe. It records the resolved
+behavioral limit, and by default never executes Bun before the probe. It records the resolved
 Bun executable's hash and enables synchronous phase markers with
 `PROC_SAFE_SMOKE_TRACE=1`. Markers contain phase, runtime, architecture, thread and
 elapsed time; the first marker follows static module initialization. Select `startup_launch=arch` only for a separate comparison of
@@ -75,8 +75,14 @@ asynchronous child solely to expose its owned PID. It takes at most one bounded
 stack sample at ten seconds, keeps the 30-second deadline, and allows one second
 for termination before killing only that child. The log omits sample headers and
 binary-image paths. This changes the launch API and may perturb timing; its result
-is observation evidence, not equivalent to the synchronous baseline. The diagnostic
-does not publish packages, promote a release or replace the original consumer gate.
+is observation evidence, not equivalent to the synchronous baseline.
+To separately qualify the standard installer, use `consumer_installer=setup-bun`
+and package mode. The pinned setup action downloads the same x64 binary with its
+cache disabled and verifies its revision before the unchanged 30-second package
+smoke. Its installation step is bounded to two minutes. This is an explicitly
+installer-qualified test, not a cold-start comparison or release-promotion gate.
+The diagnostic does not publish packages, promote a release or replace the original
+consumer gate.
 If no Bun entry marker appears, select `consumer_probe=startup` for a separate cold
 run of import-free JavaScript under the same executable, environment filtering and
 30-second limit. This probe skips package installation and cannot establish package

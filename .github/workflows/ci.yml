@@ -27,6 +27,11 @@ on:
         description: Observe one owned direct-startup child with a bounded stack sample
         type: boolean
         default: false
+      consumer_installer:
+        description: Manual cold install or standard installer verification
+        type: choice
+        default: manual
+        options: [manual, setup-bun]
 permissions:
   contents: read
 concurrency:
@@ -78,7 +83,7 @@ jobs:
     if: ${{ !inputs.consumer_diagnostic }}
     uses: ./.github/workflows/native.yml
   consumer-diagnostic:
-    name: Cold published consumer (macOS x64)
+    name: ${{ inputs.consumer_installer == 'setup-bun' && 'Installer-qualified consumer (macOS x64)' || 'Cold published consumer (macOS x64)' }}
     if: github.event_name == 'workflow_dispatch' && inputs.consumer_diagnostic
     runs-on: xcode-27
     timeout-minutes: 15
@@ -96,24 +101,40 @@ jobs:
           node-version: 24.22.1
           architecture: x64
       - name: Install x64 Bun without warming it
+        if: inputs.consumer_installer != 'setup-bun'
         run: |
           curl --fail --location --retry 3 --retry-delay 2 --retry-max-time 300 --connect-timeout 15 --max-time 120 "https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-darwin-x64.zip" -o "$RUNNER_TEMP/bun-x64.zip"
           unzip -q "$RUNNER_TEMP/bun-x64.zip" -d "$RUNNER_TEMP/bun-x64"
           echo "$RUNNER_TEMP/bun-x64/bun-darwin-x64" >> "$GITHUB_PATH"
-      - name: Verify Node architecture and identify the cold Bun executable
+      - name: Install and verify x64 Bun with the standard installer
+        if: inputs.consumer_installer == 'setup-bun'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        timeout-minutes: 2
+        with:
+          bun-version: 1.4.4
+          bun-download-url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-darwin-x64.zip
+          no-cache: true
+      - name: Verify Node architecture and identify the Bun executable
         shell: bash
+        env:
+          CONSUMER_INSTALLER: ${{ inputs.consumer_installer }}
+          CONSUMER_PROBE: ${{ inputs.consumer_probe }}
         run: |
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
           import { createHash } from 'node:crypto';
           import { accessSync, constants, readFileSync, realpathSync } from 'node:fs';
           import { delimiter, join } from 'node:path';
+          import { homedir } from 'node:os';
           assert.equal(process.arch, 'x64');
           const binary = process.env.PATH.split(delimiter).map(dir => join(dir, 'bun')).find(path => {
             try { accessSync(path, constants.X_OK); return true; } catch { return false; }
           });
           assert.ok(binary, 'Bun executable must resolve on PATH');
-          const expected = realpathSync(join(process.env.RUNNER_TEMP, 'bun-x64/bun-darwin-x64/bun'));
+          const standardInstaller = process.env.CONSUMER_INSTALLER === 'setup-bun';
+          if (standardInstaller) assert.equal(process.env.CONSUMER_PROBE, 'package', 'standard installer is a package qualification, not a cold-start probe');
+          const expected = realpathSync(standardInstaller
+            ? join(homedir(), '.bun/bin/bun') : join(process.env.RUNNER_TEMP, 'bun-x64/bun-darwin-x64/bun'));
           assert.equal(realpathSync(binary), expected, 'expected pinned Bun executable');
           const sha256 = createHash('sha256').update(readFileSync(binary)).digest('hex');
           assert.equal(sha256, 'c35307c7d45d65c5a385a58c4a6cb0bb9499e4e626abdee207c177a77ba666ab', 'same Bun 1.4.4 bytes as the package diagnostic');
