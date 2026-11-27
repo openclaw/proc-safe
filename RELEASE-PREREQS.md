@@ -53,6 +53,11 @@ ancestry walk, self command inspection, Darwin coalition, Windows census and pro
 Linux wait-state and temporary-file residency, plus every capability's `isSupported()`.
 Systemd is probed only with `isSupported()`; no service connection or process mutation is made.
 
+The macOS x64 consumer uses the pinned Bun setup action with an explicit x64 archive
+and cache disabled. The action verifies the runtime before the package probe; setup
+has a separate two-minute ceiling. The package probe retains its 30-second behavioral
+limit. Cold runtime startup remains a separate diagnostic below, not a package gate.
+
 Run the same public-registry smoke locally with `node scripts/installed-smoke.mjs X.Y.Z --bun`
 (omit `--bun` for Node only). Installation uses an isolated cache and empty npm configuration.
 Only installation retries: five attempts, with 5/10/20/40-second backoff, a 30-second fetch

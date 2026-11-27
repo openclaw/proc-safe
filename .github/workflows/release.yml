@@ -171,12 +171,14 @@ jobs:
         if: runner.os != 'macOS' || matrix.arch != 'x64'
         with:
           bun-version: 1.4.4
-      - name: Install x64 Bun for Rosetta consumers
+      - name: Install and verify x64 Bun for Rosetta consumers
         if: runner.os == 'macOS' && matrix.arch == 'x64'
-        run: |
-          curl --fail --location --retry 3 --retry-delay 2 --retry-max-time 300 --connect-timeout 15 --max-time 120 "https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-darwin-x64.zip" -o "$RUNNER_TEMP/bun-x64.zip"
-          unzip -q "$RUNNER_TEMP/bun-x64.zip" -d "$RUNNER_TEMP/bun-x64"
-          echo "$RUNNER_TEMP/bun-x64/bun-darwin-x64" >> "$GITHUB_PATH"
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        timeout-minutes: 2
+        with:
+          bun-version: 1.4.4
+          bun-download-url: https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-darwin-x64.zip
+          no-cache: true
       - name: Verify real runner architecture
         run: node -e "if(process.arch !== '${{ matrix.arch }}') throw new Error('wrong runner architecture')"
       - name: Fresh public-registry install and default calls on Node and Bun
