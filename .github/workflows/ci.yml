@@ -23,6 +23,10 @@ on:
         type: choice
         default: direct
         options: [direct, arch]
+      startup_observe:
+        description: Observe one owned direct-startup child with a bounded stack sample
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -120,6 +124,7 @@ jobs:
         shell: bash
         env:
           STARTUP_LAUNCH: ${{ inputs.startup_launch }}
+          STARTUP_OBSERVE: ${{ inputs.startup_observe }}
         run: |
           node --input-type=module <<'NODE'
           import { execFileSync } from 'node:child_process';
@@ -144,8 +149,19 @@ jobs:
             `];
             const withArch = process.env.STARTUP_LAUNCH === 'arch';
             delete env.STARTUP_LAUNCH;
-            execFileSync(withArch ? '/usr/bin/arch' : 'bun', withArch ? ['-x86_64', 'bun', ...args] : args,
-              { cwd: directory, env, stdio: 'inherit', timeout: 30000 });
+            delete env.STARTUP_OBSERVE;
+            if (process.env.STARTUP_OBSERVE === 'true') {
+              if (withArch) throw new Error('observation requires direct startup');
+              const { observeStartup, sampleStartup } = await import('./scripts/startup-observation.mjs');
+              const result = await observeStartup('bun', args, {
+                cwd: directory, env, sample: pid => sampleStartup(pid, directory),
+              });
+              console.log(JSON.stringify({ diagnostic: 'startup-observation', ...result }));
+              if (result.timedOut || result.code !== 0) throw new Error('observed startup failed');
+            } else {
+              execFileSync(withArch ? '/usr/bin/arch' : 'bun', withArch ? ['-x86_64', 'bun', ...args] : args,
+                { cwd: directory, env, stdio: 'inherit', timeout: 30000 });
+            }
           } finally { rmSync(directory, { recursive: true, force: true }); }
           NODE
       - name: Trace fresh public-registry install and default calls

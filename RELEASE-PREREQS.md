@@ -69,7 +69,13 @@ Bun executable's hash and enables synchronous phase markers with
 `PROC_SAFE_SMOKE_TRACE=1`. Markers contain phase, runtime, architecture, thread and
 elapsed time; the first marker follows static module initialization. Select `startup_launch=arch` only for a separate comparison of
 an explicit `/usr/bin/arch -x86_64` launcher; the default remains a direct Bun launch.
-Neither startup variant replaces a package smoke check. The diagnostic
+Neither startup variant replaces a package smoke check.
+If both launch routes stall, `startup_observe=true` with direct startup uses an
+asynchronous child solely to expose its owned PID. It takes at most one bounded
+stack sample at ten seconds, keeps the 30-second deadline, and allows one second
+for termination before killing only that child. The log omits sample headers and
+binary-image paths. This changes the launch API and may perturb timing; its result
+is observation evidence, not equivalent to the synchronous baseline. The diagnostic
 does not publish packages, promote a release or replace the original consumer gate.
 If no Bun entry marker appears, select `consumer_probe=startup` for a separate cold
 run of import-free JavaScript under the same executable, environment filtering and
